@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mail</title>
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <button class="icon-btn" id="menuBtn" title="Main menu" data-icon="menu"></button>
+    <div class="brand"><span class="logo" data-icon="mail"></span><span>Mail</span></div>
+    <form class="search" id="searchForm" role="search">
+      <button type="submit" class="icon-btn" title="Search" data-icon="search"></button>
+      <input id="searchInput" type="search" placeholder="Search mail   (try from:apple is:unread)" autocomplete="off" spellcheck="false">
+      <button type="button" class="icon-btn hidden" id="clearSearch" title="Clear search" data-icon="close"></button>
+    </form>
+    <div class="top-right">
+      <button class="icon-btn" id="helpBtn" title="Keyboard shortcuts (?)" data-icon="help"></button>
+      <div class="avatar account" id="account"></div>
+    </div>
+  </header>
+
+  <div class="layout">
+    <nav class="sidebar" id="sidebar">
+      <button class="compose-btn" id="composeBtn"><span data-icon="edit"></span>Compose</button>
+      <ul class="folders" id="folderList"></ul>
+    </nav>
+    <main class="main">
+      <div class="toolbar" id="toolbar"></div>
+      <div class="view" id="view"></div>
+    </main>
+  </div>
+
+  <div id="composeHost"></div>
+  <div id="menuHost"></div>
+  <div class="toast hidden" id="toast" role="status"></div>
+
+  <div class="overlay hidden" id="help">
+    <div class="dialog">
+      <div class="dialog-head"><h2>Keyboard shortcuts</h2><button class="icon-btn" data-close data-icon="close" title="Close"></button></div>
+      <div class="shortcuts">
+        <div><kbd>c</kbd> Compose</div>
+        <div><kbd>/</kbd> Search</div>
+        <div><kbd>j</kbd> / <kbd>k</kbd> Older / newer</div>
+        <div><kbd>o</kbd> or <kbd>Enter</kbd> Open</div>
+        <div><kbd>u</kbd> Back to list</div>
+        <div><kbd>x</kbd> Select</div>
+        <div><kbd>s</kbd> Star</div>
+        <div><kbd>e</kbd> Archive</div>
+        <div><kbd>#</kbd> Delete</div>
+        <div><kbd>!</kbd> Report spam</div>
+        <div><kbd>r</kbd> Reply</div>
+        <div><kbd>a</kbd> Reply all</div>
+        <div><kbd>f</kbd> Forward</div>
+        <div><kbd>Shift</kbd>+<kbd>i</kbd> Mark read</div>
+        <div><kbd>Shift</kbd>+<kbd>u</kbd> Mark unread</div>
+        <div><kbd>⌘</kbd>+<kbd>Enter</kbd> Send</div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
