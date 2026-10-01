@@ -403,7 +403,8 @@ function renderFolders() {
   };
   ul.innerHTML = roleFolders.map(item).join("") + (custom.length ? `<li class="sep"></li>` + custom.map(item).join("") : "");
   const inbox = state.folders.find((f) => f.role === "inbox");
-  document.title = `${inbox?.unread ? `Inbox (${inbox.unread}) ` : ""}— ${state.me?.email || "Mail"}`;
+  // The window (or browser tab) is named after the signed-in account; unread mail shows on the Dock badge.
+  document.title = state.me?.email || "Inbox";
   window.webkit?.messageHandlers?.badge?.postMessage(String(inbox?.unread || 0));
 }
 
@@ -1446,6 +1447,7 @@ async function boot() {
     const me = bootData.me || await api("/api/me");
     if (me.setupRequired) { document.body.classList.add("needs-setup"); renderSetup(); finishBoot(); return; }
     state.me = me;
+    document.title = me.email;
     const acct = $("#account");
     acct.outerHTML = avatar({ name: me.name, email: me.email }, "account").replace("<span", '<button type="button"').replace(/<\/span>$/, "</button>");
     const btn = $(".account");

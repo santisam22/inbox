@@ -21,6 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate,
     var stderrTail = ""
     var quitting = false
     let updater = Updater()
+    var titleObservation: NSKeyValueObservation?
 
     // MARK: lifecycle
 
@@ -69,6 +70,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate,
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered, defer: false)
         window.title = "Inbox"
+        // The window takes the page's title: the signed-in account's address ("Inbox" while starting or setting up).
+        titleObservation = webView.observe(\.title, options: [.new]) { [weak self] view, _ in
+            let title = view.title ?? ""
+            self?.window.title = title.isEmpty ? "Inbox" : title
+        }
         window.minSize = NSSize(width: 720, height: 480)
         window.contentView = webView
         window.isReleasedWhenClosed = false
