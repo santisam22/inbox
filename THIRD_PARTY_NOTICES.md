@@ -10,4 +10,6 @@ Inbox's own code is MIT-licensed (see [LICENSE](LICENSE)). The downloadable app 
 
 The source repository doesn't include any of this software. `build.sh` downloads it at build time.
 
+The website in `docs/` uses the [Inter](https://rsms.me/inter/) typeface by Rasmus Andersson, licensed under the [SIL Open Font License 1.1](https://github.com/rsms/inter/blob/master/LICENSE.txt).
+
 "iCloud" is a trademark of Apple Inc. Inbox is an independent project and isn't affiliated with or endorsed by Apple.

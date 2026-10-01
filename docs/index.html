@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Inbox for iCloud Mail</title>
+<meta name="description" content="A fast, Gmail-style Mac app for your iCloud email. Free and open source.">
+<link rel="icon" href="icon.png">
+<link rel="apple-touch-icon" href="icon.png">
+<style>
+  @font-face { font-family: Inter; font-weight: 400; src: url(inter-400.woff2) format("woff2"); font-display: swap; }
+  @font-face { font-family: Inter; font-weight: 600; src: url(inter-600.woff2) format("woff2"); font-display: swap; }
+  @font-face { font-family: Inter; font-weight: 700; src: url(inter-700.woff2) format("woff2"); font-display: swap; }
+
+  :root {
+    --accent: #2f7bf5;
+    --bg: #111113;
+    --panel: #18181b;
+    --line: #2e2e33;
+    --text: #f2f2f3;
+    --muted: #9a9aa3;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 400 16px/1.55 Inter, -apple-system, "Segoe UI", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  main { max-width: 760px; margin: 0 auto; padding: 72px 16px 48px; }
+  a { color: var(--accent); }
+
+  header { text-align: center; }
+  header img { width: 96px; height: 96px; border-radius: 22px; box-shadow: 0 12px 40px rgba(47, 123, 245, .3); }
+  h1 { font-size: clamp(34px, 7vw, 48px); font-weight: 700; letter-spacing: -.02em; margin: 24px 0 8px; }
+  .tagline { color: var(--muted); font-size: 18px; margin: 0 auto; max-width: 30em; }
+
+  .downloads { display: flex; justify-content: center; margin: 48px 0 16px; }
+  .card {
+    display: flex; flex-direction: column; gap: 4px; width: 100%; max-width: 380px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+    padding: 22px; color: inherit; text-decoration: none;
+    transition: border-color .15s, transform .15s;
+  }
+  .card:hover { border-color: var(--accent); transform: translateY(-2px); }
+  .card:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  .card .os { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 19px; }
+  .card svg { width: 22px; height: 22px; fill: currentColor; flex: none; }
+  .card .meta { color: var(--muted); font-size: 14px; }
+  .card .btn {
+    margin-top: 16px; align-self: flex-start;
+    background: var(--accent); color: #fff;
+    font-weight: 600; font-size: 15px; padding: 10px 18px; border-radius: 9px;
+  }
+
+  .note { text-align: center; color: var(--muted); font-size: 14px; margin: 0; }
+  .note.warn { color: var(--text); margin-top: 8px; display: none; }
+
+  section { margin-top: 64px; }
+  h2 { font-size: 20px; font-weight: 600; margin: 0 0 16px; }
+  .features { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 560px) { .features { grid-template-columns: 1fr; } }
+  .feature { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; }
+  .feature b { display: block; font-weight: 600; margin-bottom: 4px; }
+  .feature span { color: var(--muted); font-size: 14px; }
+
+  details { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px 20px; margin-bottom: 12px; }
+  summary { cursor: pointer; font-weight: 600; }
+  details ol, details p { margin: 12px 0 0; color: var(--muted); }
+  details ol { padding-left: 20px; }
+  details li { margin-bottom: 6px; }
+  details b { color: var(--text); font-weight: 600; }
+
+  footer { margin-top: 64px; text-align: center; color: var(--muted); font-size: 13px; }
+  footer a { color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <img src="icon.png" alt="" width="96" height="96">
+    <h1>Inbox</h1>
+    <p class="tagline">A fast, Gmail-style app for your iCloud email. It runs on your Mac and talks directly to iCloud, with nothing in between.</p>
+  </header>
+
+  <div class="downloads">
+    <a class="card" id="dl-mac" download>
+      <span class="os">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16.37 12.64c-.02-2.3 1.88-3.4 1.96-3.46-1.07-1.56-2.73-1.78-3.32-1.8-1.41-.14-2.76.83-3.47.83-.72 0-1.82-.81-3-.79-1.54.02-2.96.9-3.76 2.28-1.6 2.78-.41 6.9 1.15 9.16.76 1.1 1.67 2.34 2.86 2.3 1.15-.05 1.58-.74 2.97-.74 1.38 0 1.77.74 2.98.72 1.24-.02 2.02-1.12 2.77-2.23.88-1.28 1.24-2.52 1.26-2.59-.03-.01-2.41-.92-2.43-3.68zM14.1 5.9c.63-.77 1.06-1.83.94-2.9-.91.04-2.02.61-2.67 1.37-.58.67-1.1 1.76-.96 2.8 1.02.08 2.06-.52 2.69-1.27z"/></svg>
+        Download for Mac
+      </span>
+      <span class="meta">macOS 12 or later · Apple silicon &amp; Intel · 45 MB</span>
+      <span class="btn">Download .dmg</span>
+    </a>
+  </div>
+  <p class="note">Free and open source. Works with any iCloud Mail address.</p>
+  <p class="note warn" id="not-mac">Inbox is a Mac app. Open this page on your Mac to download it.</p>
+
+  <section>
+    <h2>Why Inbox</h2>
+    <div class="features">
+      <div class="feature"><b>Feels like Gmail</b><span>Clean inbox, search with from: and is:unread, stars, archive, and Gmail's keyboard shortcuts.</span></div>
+      <div class="feature"><b>Private by design</b><span>No servers or forwarding. Your password stays in your Mac's Keychain.</span></div>
+      <div class="feature"><b>Blocks tracking</b><span>Remote images stay off until you allow them, so senders can't tell when you open mail.</span></div>
+      <div class="feature"><b>Stays in sync</b><span>Reads, deletes and moves show up on your iPhone and iCloud.com too.</span></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Getting started</h2>
+    <details id="help-install" open>
+      <summary>1. Install</summary>
+      <ol>
+        <li>Open <b>Inbox.dmg</b> and drag <b>Inbox</b> into <b>Applications</b>.</li>
+        <li>Open Inbox. If macOS says it “could not verify” the app, click <b>Done</b>.</li>
+        <li>Go to <b>System Settings → Privacy &amp; Security</b>, scroll down, and click <b>Open Anyway</b> next to Inbox.</li>
+        <li>Enter your Mac password and click <b>Open Anyway</b> again. You only need to do this once.</li>
+      </ol>
+    </details>
+    <details>
+      <summary>2. Connect your iCloud email</summary>
+      <ol>
+        <li>Enter your iCloud email address in Inbox.</li>
+        <li>Click <b>Open Apple Account</b>, sign in, and choose <b>App-Specific Passwords</b>. Click <b>+</b> and name it “Inbox”.</li>
+        <li>Copy the password Apple shows you (it looks like <b>abcd-efgh-ijkl-mnop</b>) and paste it into Inbox. It connects right away.</li>
+      </ol>
+      <p>Never use your Apple Account password here. Inbox only accepts app-specific passwords, which you can revoke at any time on account.apple.com.</p>
+    </details>
+  </section>
+
+  <footer>
+    © <span id="year"></span> Inbox · <a id="source" href="#">Source code</a> · MIT License<br>
+    Not affiliated with Apple. iCloud is a trademark of Apple Inc.
+  </footer>
+</main>
+
+<script>
+  const GITHUB_USER = "santisam22";
+  const GITHUB_REPO = "inbox";
+
+  // Always points at the newest release, so publishing an update never requires editing this page.
+  const repo = `https://github.com/${GITHUB_USER}/${GITHUB_REPO}`;
+  document.getElementById("dl-mac").href = `${repo}/releases/latest/download/Inbox.dmg`;
+  document.getElementById("source").href = repo;
+  document.getElementById("year").textContent = new Date().getFullYear();
+
+  // Inbox is Mac-only: tell visitors on other devices.
+  if (!/Mac/.test(navigator.userAgent) || /iPhone|iPad/.test(navigator.userAgent)) {
+    document.getElementById("not-mac").style.display = "block";
+  }
+</script>
+</body>
+</html>
