@@ -41,6 +41,7 @@ The app is ad-hoc signed, not notarized. A Mac that downloads it will block the 
 
 - `~/.icloud-mail/config.json`: email, name and local secret (readable only by you)
 - `~/.icloud-mail/settings.json` and `background`: your Settings choices and background image
+- `~/.icloud-mail/index.json`: the sender and subject of each Inbox message, used to sort mail into tabs on your Mac. Only new messages are downloaded after the first time. Deleted when you sign out
 - `~/.icloud-mail/cache.json`: the folder list and first page of your Inbox (sender, subject and a short preview), so Inbox opens instantly. Deleted when you sign out
 - Keychain item "Inbox (iCloud Mail)": the app-specific password
 

@@ -1,1 +1,1 @@
-Opens faster, with a clean loading screen. New Settings page: themes, accent colors, background images, density and text size.
+Sort your Inbox into tabs (Transactions, School, Work, Personal, Ads) by keyword, plus new toolbar tools you can customize.

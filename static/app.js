@@ -31,6 +31,20 @@ const ICONS = {
   minimize: "M6 19h12v2H6z",
   maximize: "M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z",
   settings: "M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.488.488 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z",
+  label: "M17.63 5.84C17.27 5.33 16.67 5 16 5L5 5.01C3.9 5.01 3 5.9 3 7v10c0 1.1.9 1.99 2 1.99L16 19c.67 0 1.27-.33 1.63-.84L22 12l-4.37-6.16z",
+  caret: "M7 10l5 5 5-5z",
+  more: "M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z",
+  doneAll: "M18 7l-1.41-1.41-6.34 6.34 1.41 1.41L18 7zm4.24-1.41L11.66 16.17 7.48 12l-1.41 1.41L11.66 19l12-12-1.42-1.41zM.41 13.41L6 19l1.41-1.41L1.83 12 .41 13.41z",
+  sweep: "M15 16h4v2h-4zm0-8h7v2h-7zm0 4h6v2h-6zM3 18c0 1.1.9 2 2 2h6c1.1 0 2-.9 2-2V8H3v10zM14 5h-3l-1-1H6L5 5H2v2h12z",
+  lock: "M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z",
+  up: "M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z",
+  down: "M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z",
+  add: "M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z",
+  receipt: "M18 17H6v-2h12v2zm0-4H6v-2h12v2zm0-4H6V7h12v2zM3 22l1.5-1.5L6 22l1.5-1.5L9 22l1.5-1.5L12 22l1.5-1.5L15 22l1.5-1.5L18 22l1.5-1.5L21 22V2l-1.5 1.5L18 2l-1.5 1.5L15 2l-1.5 1.5L12 2l-1.5 1.5L9 2 7.5 3.5 6 2 4.5 3.5 3 2v20z",
+  school: "M5 13.18v4L12 21l7-3.82v-4L12 17l-7-3.82zM12 3L1 9l11 6 9-4.91V17h2V9L12 3z",
+  work: "M20 6h-4V4c0-1.11-.89-2-2-2h-4c-1.11 0-2 .89-2 2v2H4c-1.11 0-1.99.89-1.99 2L2 19c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2zm-6 0h-4V4h4v2z",
+  person: "M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z",
+  tag: "M21.41 11.58l-9-9C12.05 2.22 11.55 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .55.22 1.05.59 1.42l9 9c.36.36.86.58 1.41.58.55 0 1.05-.22 1.41-.59l7-7c.37-.36.59-.86.59-1.41 0-.55-.23-1.06-.59-1.42zM5.5 7C4.67 7 4 6.33 4 5.5S4.67 4 5.5 4 7 4.67 7 5.5 6.33 7 5.5 7z",
   image: "M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z",
   file: "M6 2c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6H6zm7 7V3.5L18.5 9H13z",
 };
@@ -117,7 +131,10 @@ const state = {
   view: "list",
   settings: {},
   listFromCache: false,
+  category: "",
+  catStatus: { unread: {}, indexing: null },
 };
+const PAGES = { "#settings": "settings", "#categories": "categories" };
 let listToken = 0;
 let settingsReturnHash = "#f=INBOX";
 
@@ -131,7 +148,8 @@ const inRole = (role) => state.roles[role] === state.folder;
 
 function readHash() {
   const p = new URLSearchParams(location.hash.slice(1));
-  return { folder: p.get("f") || "INBOX", page: Math.max(0, +p.get("p") || 0), query: p.get("q") || "", uid: p.get("m") ? +p.get("m") : null };
+  return { folder: p.get("f") || "INBOX", page: Math.max(0, +p.get("p") || 0), query: p.get("q") || "",
+    uid: p.get("m") ? +p.get("m") : null, category: p.get("c") || "" };
 }
 function go(change) {
   const n = { ...readHash(), ...change };
@@ -139,22 +157,25 @@ function go(change) {
   p.set("f", n.folder);
   if (n.page) p.set("p", n.page);
   if (n.query) p.set("q", n.query);
+  if (n.category && !n.query) p.set("c", n.category);
   if (n.uid) p.set("m", n.uid);
   const hash = "#" + p.toString();
   if (location.hash === hash) route(); else location.hash = hash;
 }
 
 async function route() {
-  if (location.hash === "#settings") {
-    state.view = "settings";
+  if (PAGES[location.hash]) {
+    state.view = PAGES[location.hash];
     document.body.classList.remove("nav-open");
     render();
     return;
   }
   const h = readHash();
-  const listChanged = h.folder !== state.folder || h.page !== state.page || h.query !== state.query || !state.list;
-  if (h.folder !== state.folder || h.query !== state.query) { state.selected.clear(); state.cursor = 0; }
-  Object.assign(state, { folder: h.folder, page: h.page, query: h.query });
+  if (h.category && !enabledCategories().some((c) => c.id === h.category)) h.category = "";
+  const listChanged = h.folder !== state.folder || h.page !== state.page || h.query !== state.query
+    || h.category !== state.category || !state.list;
+  if (h.folder !== state.folder || h.query !== state.query || h.category !== state.category) { state.selected.clear(); state.cursor = 0; }
+  Object.assign(state, { folder: h.folder, page: h.page, query: h.query, category: h.category });
   $("#searchInput").value = h.query;
   $("#clearSearch").classList.toggle("hidden", !h.query);
   document.body.classList.remove("nav-open");
@@ -185,9 +206,18 @@ async function loadList({ quiet = false } = {}) {
   const token = ++listToken;
   if (!quiet) { state.loading = true; if (state.view === "list") render(); }
   try {
-    const data = await api(`/api/messages?folder=${enc(state.folder)}&page=${state.page}&q=${enc(state.query)}`);
+    const category = inCategoryTabs() ? state.category : "";
+    const data = await api(`/api/messages?folder=${enc(state.folder)}&page=${state.page}&q=${enc(state.query)}&category=${enc(category)}`);
     if (token !== listToken) return;
     state.list = data;
+    if (data.previewsPending?.length) fillPreviews(token, data);
+    if (data.indexing && !data.indexing.complete) {
+      // First-time sorting is still running: refresh this tab as more mail is sorted.
+      clearTimeout(loadList.indexTimer);
+      loadList.indexTimer = setTimeout(() => {
+        if (state.view === "list" && state.list === data) { loadList({ quiet: true }); loadCategoryStatus(); }
+      }, 3000);
+    }
     const uids = new Set(data.messages.map((m) => m.uid));
     state.selected = new Set([...state.selected].filter((u) => uids.has(u)));
     state.cursor = Math.min(state.cursor, Math.max(0, data.messages.length - 1));
@@ -225,10 +255,138 @@ async function openMessage(uid) {
   render();
 }
 
+/** Preview text arrives separately (it's slow for older mail), 25 rows at a time. */
+async function fillPreviews(token, data) {
+  const pending = [...data.previewsPending];
+  while (pending.length) {
+    const batch = pending.splice(0, 25);
+    let got;
+    try { got = await api(`/api/previews?folder=${enc(data.folder)}&uids=${batch.join(",")}`); } catch { return; }
+    if (token !== listToken || state.list !== data) return;
+    for (const m of data.messages) if (got[m.uid] !== undefined) m.snippet = got[m.uid];
+    if (state.view === "list") renderList();
+  }
+}
+
+// ------------------------------------------------------------------ categories (Inbox tabs)
+const CATEGORY_ICONS = { transactions: "receipt", school: "school", work: "work", person: "person", ads: "tag" };
+const enabledCategories = () => (state.settings.categories || []).filter((c) => c.enabled);
+const inCategoryTabs = () => state.folder === (state.roles.inbox || "INBOX") && !state.query && enabledCategories().length > 0;
+const categoryName = (id) => (state.settings.categories || []).find((c) => c.id === id)?.name || "All mail";
+
+async function loadCategoryStatus() {
+  if (!enabledCategories().length) return;
+  try {
+    state.catStatus = await api("/api/categories");
+    renderTabs();
+    if (state.catStatus.indexing && !state.catStatus.indexing.complete) {
+      clearTimeout(loadCategoryStatus.timer);
+      loadCategoryStatus.timer = setTimeout(loadCategoryStatus, 3000);
+    }
+  } catch { /* counts are a nicety */ }
+}
+
+function renderTabs() {
+  const bar = $("#tabs");
+  const show = state.view === "list" && inCategoryTabs();
+  bar.classList.toggle("hidden", !show);
+  if (!show) return;
+  const unread = state.catStatus.unread || {};
+  const tab = (id, name, ic, count) => `<button class="tab ${state.category === id ? "on" : ""}" role="tab" aria-selected="${state.category === id}" data-tab="${esc(id)}">
+    ${icon(ic)}<span>${esc(name)}</span>${count ? `<span class="badge">${count > 999 ? "999+" : count}</span>` : ""}</button>`;
+  bar.innerHTML = tab("", "All mail", "inbox", 0)
+    + enabledCategories().map((c) => tab(c.id, c.name, CATEGORY_ICONS[c.id] || "label", unread[c.id] || 0)).join("");
+}
+
+// ------------------------------------------------------------------ toolbar tools
+// Each tool shows when it applies: "none" = nothing selected, "selection" = messages selected.
+// Which tools appear, and their order, comes from Settings → Toolbar; the rest live in "More".
+const selectedMsgs = () => (state.list?.messages || []).filter((m) => state.selected.has(m.uid));
+const TOOLS = {
+  refresh: { label: "Refresh", icon: "refresh", when: "none", run: () => { loadFolders(); loadList(); loadCategoryStatus(); } },
+  markAllRead: { label: "Mark all as read", icon: "doneAll", when: "none", run: () => markAllRead() },
+  emptyFolder: { label: () => (inRole("junk") ? "Empty Spam" : "Empty Trash"), icon: "sweep", when: "none",
+    show: () => inRole("trash") || inRole("junk"), run: () => emptyFolder() },
+  archive: { label: "Archive (e)", icon: "archive", when: "selection", show: () => state.roles.archive && !inRole("archive"), run: () => moveAction("archive") },
+  spam: { label: "Report spam (!)", icon: "junk", when: "selection", show: () => state.roles.junk && !inRole("junk"), run: () => moveAction("spam") },
+  delete: { label: () => (inRole("trash") ? "Delete forever (#)" : "Delete (#)"), icon: "trash", when: "selection", run: () => moveAction("delete") },
+  markRead: { label: "Mark as read (Shift+I)", icon: "read", when: "selection", show: () => selectedMsgs().some((m) => !m.seen),
+    run: () => { setFlag("\\Seen", true); state.selected.clear(); } },
+  markUnread: { label: "Mark as unread (Shift+U)", icon: "mail", when: "selection", show: () => selectedMsgs().some((m) => m.seen),
+    run: () => { setFlag("\\Seen", false); state.selected.clear(); } },
+  star: { label: "Star", icon: "star", when: "selection", show: () => selectedMsgs().some((m) => !m.flagged), run: () => setFlag("\\Flagged", true) },
+  unstar: { label: "Remove star", icon: "starOutline", when: "selection", show: () => selectedMsgs().some((m) => m.flagged), run: () => setFlag("\\Flagged", false) },
+  move: { label: "Move to", icon: "move", when: "selection", run: (anchor) => showMoveMenu(anchor) },
+};
+const toolLabel = (id) => { const l = TOOLS[id].label; return typeof l === "function" ? l() : l; };
+const toolApplies = (id, context) => TOOLS[id] && TOOLS[id].when === context && (!TOOLS[id].show || TOOLS[id].show());
+
+function toolbarTools(context) {
+  const order = state.settings.toolbar || Object.keys(TOOLS).map((id) => ({ id, on: true }));
+  const applicable = order.filter((t) => toolApplies(t.id, context));
+  return { shown: applicable.filter((t) => t.on).map((t) => t.id), hidden: applicable.filter((t) => !t.on).map((t) => t.id) };
+}
+
+function runTool(id, anchor) {
+  TOOLS[id]?.run(anchor);
+}
+
+function showSelectMenu(anchor) {
+  const msgs = state.list?.messages || [];
+  const pick = (fn) => () => { state.selected = new Set(msgs.filter(fn).map((m) => m.uid)); render(); };
+  showMenu(anchor, null, [
+    { label: "All", icon: "doneAll", run: pick(() => true) },
+    { label: "None", icon: "close", run: pick(() => false) },
+    { label: "Read", icon: "read", run: pick((m) => m.seen) },
+    { label: "Unread", icon: "mail", run: pick((m) => !m.seen) },
+    { label: "Starred", icon: "star", run: pick((m) => m.flagged) },
+    { label: "Unstarred", icon: "starOutline", run: pick((m) => !m.flagged) },
+  ]);
+}
+
+function showMoreMenu(anchor) {
+  const { hidden } = toolbarTools(state.selected.size ? "selection" : "none");
+  showMenu(anchor, null, [
+    ...hidden.map((id) => ({ label: toolLabel(id).replace(/ \(.*\)$/, ""), icon: TOOLS[id].icon, run: () => runTool(id, anchor) })),
+    { label: "Customize toolbar…", icon: "settings", run: () => openSettings("toolbar") },
+  ]);
+}
+
+async function markAllRead() {
+  const where = state.category ? categoryName(state.category) : folderLabel(state.folder);
+  try {
+    const r = await api("/api/mark-all-read", { folder: state.folder, category: inCategoryTabs() ? state.category : "" });
+    for (const m of state.list?.messages || []) m.seen = true;
+    render();
+    toast(r.marked ? `Marked ${r.marked.toLocaleString()} message${r.marked === 1 ? "" : "s"} as read in ${where}.` : `Everything in ${where} is already read.`);
+  } catch (e) {
+    toast(e.message);
+  }
+  loadFolders();
+  loadCategoryStatus();
+}
+
+async function emptyFolder() {
+  const name = inRole("junk") ? "Spam" : "Trash";
+  const count = state.list?.total || 0;
+  if (!count) return toast(`${name} is already empty.`);
+  if (!confirm(`Permanently delete all ${count.toLocaleString()} message${count === 1 ? "" : "s"} in ${name}? This can't be undone.`)) return;
+  try {
+    const r = await api("/api/empty", { folder: state.folder });
+    toast(`Deleted ${r.deleted.toLocaleString()} message${r.deleted === 1 ? "" : "s"} from ${name}.`);
+  } catch (e) {
+    toast(e.message);
+  }
+  loadList();
+  loadFolders();
+}
+
 // ------------------------------------------------------------------ rendering
 function render() {
   renderToolbar();
+  renderTabs();
   if (state.view === "settings") renderSettings();
+  else if (state.view === "categories") renderCategories();
   else if (state.view === "message") renderMessage();
   else renderList();
 }
@@ -261,8 +419,8 @@ function renderToolbar() {
     return out.join("");
   };
 
-  if (state.view === "settings") {
-    tb.innerHTML = `${btn("closeSettings", "back", "Back to mail (Esc)")}<span class="settings-title">Settings</span>`;
+  if (state.view === "settings" || state.view === "categories") {
+    tb.innerHTML = `${btn("closeSettings", "back", "Back to mail (Esc)")}<span class="settings-title">${state.view === "settings" ? "Settings" : "Categories"}</span>`;
     return;
   }
 
@@ -281,13 +439,13 @@ function renderToolbar() {
   const msgs = list?.messages || [];
   const n = state.selected.size;
   const all = n > 0 && n === msgs.length;
-  const anyUnread = msgs.some((m) => state.selected.has(m.uid) && !m.seen);
   const start = list && list.total ? list.page * list.pageSize + 1 : 0;
   const end = list ? Math.min(list.total, (list.page + 1) * list.pageSize) : 0;
-  tb.innerHTML = `<label class="checkbox" title="Select"><input type="checkbox" data-action="selectAll" ${all ? "checked" : ""}></label>
-    ${n ? `${destructive()}<span class="divider"></span>
-      ${anyUnread ? btn("read", "read", "Mark as read (Shift+I)") : btn("unread", "mail", "Mark as unread (Shift+U)")}
-      ${btn("moveMenu", "move", "Move to")}` : btn("refresh", "refresh", "Refresh")}
+  const { shown } = toolbarTools(n ? "selection" : "none");
+  tb.innerHTML = `<span class="select-group"><label class="checkbox" title="Select all"><input type="checkbox" data-action="selectAll" ${all ? "checked" : ""}></label><button class="caret-btn" data-action="selectMenu" title="Select">${icon("caret")}</button></span>
+    ${shown.map((id) => `<button class="icon-btn" data-tool="${id}" title="${esc(toolLabel(id))}">${icon(TOOLS[id].icon)}</button>`).join("")}
+    ${btn("moreMenu", "more", "More")}
+    ${n ? `<span class="sel-count">${n} selected</span>` : ""}
     <span class="spacer"></span>
     ${list && list.total ? `<span class="range">${start.toLocaleString()}–${end.toLocaleString()} of ${list.total.toLocaleString()}</span>` : ""}
     ${btn("prevPage", "left", "Newer", state.page > 0 ? "" : "disabled")}${btn("nextPage", "right", "Older", list && end < list.total ? "" : "disabled")}`;
@@ -299,10 +457,17 @@ function renderList() {
   const view = $("#view");
   const list = state.list;
   let html = state.loading ? `<div class="loading-bar"></div>` : "";
+  const ix = list?.indexing;
+  const sorting = ix && !ix.complete;
+  if (sorting) {
+    const pct = ix.total ? Math.min(99, Math.floor((100 * ix.indexed) / ix.total)) : 0;
+    html += `<div class="index-note"><span class="spinner"></span>Sorting your mail into tabs for the first time… ${pct}%. Newest mail is sorted first.</div>`;
+  }
   if (list?.error) {
     html += `<div class="error-box">${esc(list.error)}</div>`;
-  } else if (list && !list.messages.length && !state.loading) {
-    html += `<div class="empty">${icon(state.query ? "search" : "inbox")}${state.query ? "No messages matched your search." : `No messages in ${esc(folderLabel(state.folder))}.`}</div>`;
+  } else if (list && !list.messages.length && !state.loading && !sorting) {
+    const where = state.category && inCategoryTabs() ? `${esc(categoryName(state.category))}. Edit its keywords in Categories to sort more mail here` : esc(folderLabel(state.folder));
+    html += `<div class="empty">${icon(state.query ? "search" : "inbox")}${state.query ? "No messages matched your search." : `No messages in ${where}.`}</div>`;
   } else if (list) {
     const showTo = inRole("sent") || inRole("drafts");
     html += list.messages.map((m, i) => {
@@ -434,6 +599,7 @@ async function moveAction(kind, uids = targets(), dest) {
     toast(e.message);
   }
   loadFolders();
+  loadCategoryStatus();
   if (state.view === "list" && state.folder === folder) loadList({ quiet: true });
 }
 
@@ -445,7 +611,7 @@ async function setFlag(flag, on, uids = targets()) {
   render();
   try {
     await api("/api/flag", { folder: state.folder, uids, flag, on });
-    if (key === "seen") loadFolders();
+    if (key === "seen") { loadFolders(); loadCategoryStatus(); }
   } catch (e) {
     toast(e.message);
     loadList({ quiet: true });
@@ -691,9 +857,14 @@ document.addEventListener("click", (e) => {
 
   if (t.closest("[data-folder]")) {
     e.preventDefault();
-    go({ folder: t.closest("[data-folder]").dataset.folder, page: 0, query: "", uid: null });
+    go({ folder: t.closest("[data-folder]").dataset.folder, page: 0, query: "", uid: null, category: "" });
     return;
   }
+
+  const tool = t.closest("[data-tool]");
+  if (tool) { e.stopPropagation(); runTool(tool.dataset.tool, tool); return; }
+  const tabEl = t.closest("[data-tab]");
+  if (tabEl) { go({ category: tabEl.dataset.tab, page: 0, uid: null }); return; }
 
   if (row && (!action || action === "select")) {
     const uid = +row.dataset.uid;
@@ -716,7 +887,9 @@ document.addEventListener("click", (e) => {
       render();
       break;
     }
-    case "refresh": loadFolders(); loadList(); break;
+    case "refresh": loadFolders(); loadList(); loadCategoryStatus(); break;
+    case "selectMenu": e.stopPropagation(); showSelectMenu(actionEl); break;
+    case "moreMenu": e.stopPropagation(); showMoreMenu(actionEl); break;
     case "prevPage": go({ page: state.page - 1, uid: null }); break;
     case "nextPage": go({ page: state.page + 1, uid: null }); break;
     case "back": go({ uid: null }); break;
@@ -783,7 +956,7 @@ function onKey(e) {
     return;
   }
   if (!$("#help").classList.contains("hidden")) { if (e.key === "Escape" || e.key === "?") $("#help").classList.add("hidden"); return; }
-  if (state.view === "settings") {
+  if (PAGES["#" + state.view]) {
     if (e.key === "Escape") { e.preventDefault(); closeSettings(); }
     return;
   }
@@ -981,9 +1154,13 @@ function applyAppearance(s) {
 }
 
 // ------------------------------------------------------------------ settings page
-function openSettings() {
-  if (location.hash !== "#settings") settingsReturnHash = location.hash || "#f=INBOX";
-  location.hash = "#settings";
+function openPage(hash) {
+  if (!PAGES[location.hash]) settingsReturnHash = location.hash || "#f=INBOX";
+  location.hash = hash;
+}
+function openSettings(section) {
+  openPage("#settings");
+  if (section) setTimeout(() => $(`#settings-${section}`)?.scrollIntoView({ block: "start" }), 50);
 }
 function closeSettings() {
   location.hash = settingsReturnHash;
@@ -993,6 +1170,8 @@ async function updateSettings(changes, { rerender = true } = {}) {
   Object.assign(state.settings, changes);
   applyAppearance(state.settings);
   if (rerender && state.view === "settings") renderSettings();
+  if (rerender && state.view === "categories") renderCategories();
+  if (changes.toolbar || changes.categories) { renderToolbar(); renderTabs(); }
   try {
     await api("/api/settings", changes);
   } catch (e) {
@@ -1037,6 +1216,19 @@ function renderSettings() {
       ${seg("textSize", [["small", "Small"], ["medium", "Medium"], ["large", "Large"]])}</div>
     <div class="setting"><div class="label"><b>Message previews</b><span>Show the first line of each message in the list.</span></div>${toggle("snippets")}</div>
 
+    <h2 id="settings-toolbar">Toolbar</h2>
+    <p class="section-note">Choose the tools shown above your messages, and their order. Tools you turn off are still in the <b>⋮ More</b> menu.</p>
+    ${[["none", "When nothing is selected"], ["selection", "When messages are selected"]].map(([when, title]) => `
+      <div class="tool-group"><div class="tool-group-title">${title}</div>
+      ${(s.toolbar || []).filter((t) => TOOLS[t.id]?.when === when).map((t, i, arr) => `
+        <div class="tool-row ${t.on ? "" : "off"}">${icon(TOOLS[t.id].icon)}<span class="tool-name">${esc(toolLabel(t.id).replace(/ \(.*\)$/, ""))}</span>
+          <button class="icon-btn" data-tool-move="${t.id}" data-dir="-1" title="Move up" ${i === 0 ? "disabled" : ""}>${icon("up")}</button>
+          <button class="icon-btn" data-tool-move="${t.id}" data-dir="1" title="Move down" ${i === arr.length - 1 ? "disabled" : ""}>${icon("down")}</button>
+          <label class="switch"><input type="checkbox" data-tool-toggle="${t.id}" ${t.on ? "checked" : ""} aria-label="Show ${esc(toolLabel(t.id))}"><span></span></label>
+        </div>`).join("")}</div>`).join("")}
+    <div class="setting"><div class="label"><b>Inbox tabs</b><span>Sort mail into tabs like Transactions, School and Work.</span></div>
+      <button class="pill" data-settings-action="categories">Edit categories</button></div>
+
     <h2>Privacy</h2>
     <div class="setting"><div class="label"><b>Load remote images automatically</b><span>Off blocks tracking pixels. You can still show images in any message.</span></div>${toggle("remoteImages")}</div>
 
@@ -1056,7 +1248,18 @@ document.addEventListener("click", (e) => {
     updateSettings({ [set.dataset.set]: set.dataset.value });
     return;
   }
+  const move = e.target.closest("[data-tool-move]");
+  if (move) {
+    // Swap with the neighbor in the same group (tools only reorder within their group).
+    const list = state.settings.toolbar.map((t) => ({ ...t }));
+    const i = list.findIndex((t) => t.id === move.dataset.toolMove);
+    const group = list.map((t, idx) => [t, idx]).filter(([t]) => TOOLS[t.id]?.when === TOOLS[list[i].id].when).map(([, idx]) => idx);
+    const j = group[group.indexOf(i) + +move.dataset.dir];
+    if (j !== undefined) { [list[i], list[j]] = [list[j], list[i]]; updateSettings({ toolbar: list }); }
+    return;
+  }
   const action = e.target.closest("[data-settings-action]")?.dataset.settingsAction;
+  if (action === "categories") openPage("#categories");
   if (action === "signout") signOut();
   if (action === "checkUpdates") window.webkit?.messageHandlers?.update?.postMessage("check");
 });
@@ -1075,6 +1278,9 @@ document.addEventListener("change", async (e) => {
   if (state.view !== "settings") return;
   const t = e.target;
   if (t.matches("[data-toggle]")) updateSettings({ [t.dataset.toggle]: t.checked }, { rerender: false });
+  if (t.matches("[data-tool-toggle]")) {
+    updateSettings({ toolbar: state.settings.toolbar.map((x) => (x.id === t.dataset.toolToggle ? { ...x, on: t.checked } : x)) });
+  }
   if (t.matches("[data-dim]")) updateSettings({ backgroundDim: +t.value }, { rerender: false });
   if (t.matches("[data-color]")) updateSettings({ accent: t.value });
   if (t.matches("[data-bg-upload]") && t.files[0]) {
@@ -1090,6 +1296,105 @@ document.addEventListener("change", async (e) => {
       toast(err.message);
     }
   }
+});
+
+// ------------------------------------------------------------------ categories page
+function renderCategories() {
+  const cats = state.settings.categories || [];
+  const chip = (w, i) => `<span class="kw">${esc(w)}<button data-kw-remove="${i}" title="Remove ${esc(w)}" aria-label="Remove ${esc(w)}">${icon("close")}</button></span>`;
+  $("#view").innerHTML = `<div class="settings categories-page">
+    <p class="section-note">Inbox sorts your mail into tabs using <b>keywords in the sender or subject</b>. A message goes in the first tab it matches, top to bottom, and is always in All mail. Keywords match whole words, so “sale” won't match “wholesale”.</p>
+    <div class="cat locked">
+      <div class="cat-head"><span class="cat-icon">${icon("inbox")}</span><b class="cat-title">All mail</b>
+        <span class="cat-note">Every message. Always shown.</span><span class="spacer"></span><span class="lock" title="Can't be turned off">${icon("lock")}</span></div>
+    </div>
+    ${cats.map((c, i) => `
+    <div class="cat ${c.enabled ? "" : "off"}" data-cat="${i}">
+      <div class="cat-head">
+        <span class="cat-icon">${icon(CATEGORY_ICONS[c.id] || "label")}</span>
+        <input class="cat-name" value="${esc(c.name)}" maxlength="30" data-cat-name aria-label="Tab name">
+        <span class="spacer"></span>
+        <button class="icon-btn" data-cat-move="-1" title="Move up (checked earlier)" ${i === 0 ? "disabled" : ""}>${icon("up")}</button>
+        <button class="icon-btn" data-cat-move="1" title="Move down" ${i === cats.length - 1 ? "disabled" : ""}>${icon("down")}</button>
+        ${CATEGORY_ICONS[c.id] ? "" : `<button class="icon-btn" data-cat-delete title="Delete tab">${icon("trash")}</button>`}
+        <label class="switch" title="${c.enabled ? "Shown" : "Hidden"}"><input type="checkbox" data-cat-toggle ${c.enabled ? "checked" : ""} aria-label="Show ${esc(c.name)} tab"><span></span></label>
+      </div>
+      ${c.people ? `<p class="cat-hint">Also includes anyone who isn't an automated sender (no-reply addresses, newsletters and the like).</p>` : ""}
+      <div class="kws">${c.keywords.map(chip).join("")}<input class="kw-input" data-kw-add placeholder="${c.keywords.length ? "Add keyword…" : "Add keywords, separated by commas…"}" aria-label="Add keyword to ${esc(c.name)}"></div>
+    </div>`).join("")}
+    <div class="cat-actions">
+      <button class="pill" data-cat-new>${icon("add")}Add tab</button>
+      <button class="pill" data-cat-reset>Restore defaults</button>
+    </div>
+  </div>`;
+}
+
+async function saveCategories(cats) {
+  if (cats === "default") {
+    try {
+      await api("/api/settings", { categories: "default" });
+      state.settings = await api("/api/settings");
+    } catch (e) { toast(e.message); }
+    if (state.category && !enabledCategories().some((c) => c.id === state.category)) state.category = "";
+    renderCategories();
+    loadCategoryStatus();
+    return;
+  }
+  updateSettings({ categories: cats }).then(() => {
+    if (state.category && !enabledCategories().some((c) => c.id === state.category)) state.category = "";
+    loadCategoryStatus();
+  });
+}
+const catCopy = () => (state.settings.categories || []).map((c) => ({ ...c, keywords: [...c.keywords] }));
+const catIndex = (el) => +el.closest("[data-cat]").dataset.cat;
+
+document.addEventListener("click", (e) => {
+  if (state.view !== "categories") return;
+  const t = e.target;
+  const cats = catCopy();
+  if (t.closest("[data-cat-new]")) {
+    cats.push({ id: `c-${Date.now().toString(36)}`, name: "New tab", enabled: true, keywords: [] });
+    saveCategories(cats);
+    setTimeout(() => { const inputs = $$(".cat-name"); inputs[inputs.length - 1]?.select(); }, 50);
+  } else if (t.closest("[data-cat-reset]")) {
+    if (confirm("Restore the default tabs and keywords? Tabs you added will be removed.")) saveCategories("default");
+  } else if (t.closest("[data-cat-move]")) {
+    const i = catIndex(t), j = i + +t.closest("[data-cat-move]").dataset.catMove;
+    if (cats[j]) { [cats[i], cats[j]] = [cats[j], cats[i]]; saveCategories(cats); }
+  } else if (t.closest("[data-cat-delete]")) {
+    const i = catIndex(t);
+    if (confirm(`Delete the “${cats[i].name}” tab? Its messages stay in All mail.`)) { cats.splice(i, 1); saveCategories(cats); }
+  } else if (t.closest("[data-kw-remove]")) {
+    const i = catIndex(t);
+    cats[i].keywords.splice(+t.closest("[data-kw-remove]").dataset.kwRemove, 1);
+    saveCategories(cats);
+  } else if (t.closest(".kws") && !t.closest("button")) {
+    t.closest(".kws").querySelector(".kw-input")?.focus();
+  }
+});
+
+document.addEventListener("change", (e) => {
+  if (state.view !== "categories") return;
+  const t = e.target, cats = catCopy();
+  if (t.matches("[data-cat-toggle]")) { cats[catIndex(t)].enabled = t.checked; saveCategories(cats); }
+  if (t.matches("[data-cat-name]")) { cats[catIndex(t)].name = t.value.trim() || "Untitled"; saveCategories(cats); }
+});
+
+document.addEventListener("keydown", (e) => {
+  if (state.view !== "categories" || !e.target.matches("[data-kw-add]")) return;
+  if (e.key === "Backspace" && !e.target.value) {
+    const cats = catCopy(), i = catIndex(e.target);
+    if (cats[i].keywords.length) { cats[i].keywords.pop(); saveCategories(cats); setTimeout(() => $$(".kw-input")[i]?.focus(), 30); }
+    return;
+  }
+  if (e.key !== "Enter" && e.key !== ",") return;
+  e.preventDefault();
+  const words = e.target.value.split(",").map((w) => w.trim().toLowerCase()).filter(Boolean);
+  if (!words.length) return;
+  const cats = catCopy(), i = catIndex(e.target);
+  cats[i].keywords = [...new Set([...cats[i].keywords, ...words])];
+  saveCategories(cats);
+  setTimeout(() => $$(".kw-input")[i]?.focus(), 30);
 });
 
 async function signOut() {
@@ -1125,10 +1430,11 @@ async function boot() {
     e.preventDefault();
     const q = $("#searchInput").value.trim();
     $("#searchInput").blur();
-    go({ query: q, page: 0, uid: null });
+    go({ query: q, page: 0, uid: null, category: "" });
   });
   $("#clearSearch").onclick = () => go({ query: "", page: 0, uid: null });
   $("#settingsBtn").onclick = () => openSettings();
+  $("#categoriesBtn").onclick = () => openPage("#categories");
 
   // Settings and account info are inlined into the page by the server (no round trip).
   let bootData = {};
@@ -1158,12 +1464,13 @@ async function boot() {
     state.roles = Object.fromEntries(state.folders.filter((f) => f.role).map((f) => [f.role, f.name]));
   }
   const h = readHash();
-  if (cached.inbox && h.folder === "INBOX" && !h.page && !h.query && !h.uid) {
+  if (cached.inbox && h.folder === "INBOX" && !h.page && !h.query && !h.uid && !h.category) {
     state.list = cached.inbox;
     state.listFromCache = true;
   }
   loadFolders();  // runs on its own connection, in parallel with the message list
   await route();
+  loadCategoryStatus();
   finishBoot();
   if (state.listFromCache) { state.listFromCache = false; loadList({ quiet: true }); }
 
@@ -1171,6 +1478,7 @@ async function boot() {
   setInterval(() => {
     if (document.visibilityState !== "visible") return;
     loadFolders();
+    loadCategoryStatus();
     if (state.view === "list" && !state.selected.size) loadList({ quiet: true });
   }, 60000);
   document.addEventListener("visibilitychange", () => {

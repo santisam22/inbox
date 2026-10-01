@@ -80,6 +80,34 @@ def save_config(cfg):
 SETTINGS_FILE = os.path.join(CONFIG_DIR, "settings.json")
 BACKGROUND_FILE = os.path.join(CONFIG_DIR, "background")
 CACHE_FILE = os.path.join(CONFIG_DIR, "cache.json")
+INDEX_FILE = os.path.join(CONFIG_DIR, "index.json")
+
+# Inbox tabs. A message goes in the FIRST enabled category whose keywords appear in its
+# sender or subject (whole words). "people" also takes anyone who isn't an automated sender.
+DEFAULT_CATEGORIES = [
+    {"id": "transactions", "name": "Transactions", "enabled": True, "keywords": [
+        "receipt", "invoice", "order", "payment", "paid", "statement", "bank", "banking", "transaction",
+        "purchase", "refund", "billing", "bill", "paypal", "venmo", "zelle", "cash app", "deposit",
+        "withdrawal", "transfer", "chase", "wells fargo", "bank of america", "capital one", "amex",
+        "credit card", "debit", "subscription", "renewal", "shipped", "delivered", "your order"]},
+    {"id": "school", "name": "School", "enabled": True, "keywords": [
+        "university", "college", "school", ".edu", "course", "class", "canvas", "blackboard", "professor",
+        "assignment", "homework", "semester", "tuition", "registrar", "campus", "exam", "quiz", "syllabus",
+        "financial aid", "student", "lecture", "grades", "admissions"]},
+    {"id": "work", "name": "Work", "enabled": True, "keywords": [
+        "meeting", "project", "deadline", "standup", "agenda", "interview", "offer letter", "client",
+        "proposal", "slack", "jira", "asana", "zoom", "calendar", "invitation", "schedule", "shift",
+        "payroll", "onboarding", "timesheet", "linkedin", "recruiter"]},
+    {"id": "person", "name": "Personal", "enabled": True, "people": True, "keywords": []},
+    {"id": "ads", "name": "Ads", "enabled": True, "keywords": [
+        "sale", "% off", "discount", "deal", "deals", "promo", "promotion", "coupon", "sponsored",
+        "shop now", "limited time", "free shipping", "clearance", "exclusive", "new arrivals",
+        "black friday", "cyber monday", "last chance", "ends tonight", "newsletter", "offer", "save big"]},
+]
+TOOL_IDS = ["refresh", "markAllRead", "emptyFolder", "archive", "spam", "delete",
+            "markRead", "markUnread", "star", "unstar", "move"]
+DEFAULT_TOOLBAR = [{"id": t, "on": t != "unstar"} for t in TOOL_IDS]
+
 DEFAULT_SETTINGS = {
     "theme": "system",          # system | light | dark
     "accent": "#0b57d0",
@@ -89,6 +117,8 @@ DEFAULT_SETTINGS = {
     "textSize": "medium",       # small | medium | large
     "snippets": True,
     "remoteImages": False,
+    "categories": DEFAULT_CATEGORIES,
+    "toolbar": DEFAULT_TOOLBAR,
 }
 SETTING_CHOICES = {
     "theme": {"system", "light", "dark"},
@@ -117,7 +147,44 @@ def load_settings():
             saved = json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
         saved = {}
-    return {**DEFAULT_SETTINGS, **{k: v for k, v in saved.items() if k in DEFAULT_SETTINGS}}
+    settings = {**DEFAULT_SETTINGS, **{k: v for k, v in saved.items() if k in DEFAULT_SETTINGS}}
+    known = {t["id"] for t in settings["toolbar"]}
+    settings["toolbar"] = settings["toolbar"] + [t for t in DEFAULT_TOOLBAR if t["id"] not in known]
+    return settings
+
+
+def clean_categories(value):
+    if not isinstance(value, list) or len(value) > 20:
+        raise MailError("Invalid categories")
+    out, seen = [], set()
+    for c in value:
+        cid = str(c.get("id", ""))
+        if not re.fullmatch(r"[a-z0-9-]{1,40}", cid) or cid in seen:
+            raise MailError("Invalid category")
+        seen.add(cid)
+        name = re.sub(r"\s+", " ", str(c.get("name", ""))).strip()[:30] or "Untitled"
+        words = []
+        for w in c.get("keywords", [])[:150]:
+            w = re.sub(r"\s+", " ", str(w)).strip().lower()[:40]
+            if w and w not in words and not re.search(r"[\x00-\x1f]", w):
+                words.append(w)
+        item = {"id": cid, "name": name, "enabled": bool(c.get("enabled", True)), "keywords": words}
+        if cid == "person":
+            item["people"] = True
+        out.append(item)
+    return out
+
+
+def clean_toolbar(value):
+    if not isinstance(value, list):
+        raise MailError("Invalid toolbar")
+    out, seen = [], set()
+    for t in value:
+        tid = t.get("id")
+        if tid in TOOL_IDS and tid not in seen:
+            seen.add(tid)
+            out.append({"id": tid, "on": bool(t.get("on"))})
+    return out + [t for t in DEFAULT_TOOLBAR if t["id"] not in seen]
 
 
 _settings_lock = threading.Lock()
@@ -141,6 +208,10 @@ def _save_settings(changes):
             value = max(0, min(85, int(value)))
         if key in ("snippets", "remoteImages"):
             value = bool(value)
+        if key == "categories":
+            value = DEFAULT_CATEGORIES if value == "default" else clean_categories(value)
+        if key == "toolbar":
+            value = DEFAULT_TOOLBAR if value == "default" else clean_toolbar(value)
         if key == "background" and value == "image" and not os.path.exists(BACKGROUND_FILE):
             raise MailError("Choose an image first")
         current[key] = value
@@ -198,10 +269,177 @@ def load_cache(cfg):
 
 
 def clear_cache():
-    try:
-        os.remove(CACHE_FILE)
-    except FileNotFoundError:
-        pass
+    for path in (CACHE_FILE, INDEX_FILE):
+        try:
+            os.remove(path)
+        except FileNotFoundError:
+            pass
+
+
+# ---------------------------------------------------------------- categories
+
+AUTOMATED_SENDER = re.compile(
+    r"(^|[.+_-])(no-?reply|do-?not-?reply|notifications?|newsletters?|news|mailer(-daemon)?|marketing|"
+    r"bounces?|info|updates?|alerts?|support|hello|team|contact|service|accounts?|billing|receipts?|"
+    r"orders?|offers?|promos?|promotions|digest|auto|automated|robot|members?|rewards|deals|shop|store)"
+    r"([.+_-]|$)")
+
+
+WORD_RE = re.compile(r"[a-z0-9]+")
+
+
+class KeywordMatcher:
+    """Whole-word, case-insensitive keyword match ("sale" won't match "wholesale").
+    Plain single words are set lookups; phrases and words with symbols use a regex."""
+
+    def __init__(self, words):
+        self.simple = {w for w in words if WORD_RE.fullmatch(w)}
+        self.complex = keyword_pattern([w for w in words if w not in self.simple])
+        self.empty = not words
+
+    def matches(self, text, tokens):
+        return bool(self.simple & tokens) or bool(self.complex and self.complex.search(text))
+
+
+def keyword_pattern(words):
+    """Regex for keywords; word boundaries apply only where a keyword starts/ends with a letter or digit."""
+    parts = []
+    for w in words:
+        p = re.escape(w)
+        if w[0].isalnum():
+            p = r"(?<![a-z0-9])" + p
+        if w[-1].isalnum():
+            p += r"(?![a-z0-9])"
+        parts.append(p)
+    return re.compile("|".join(parts)) if parts else None
+
+
+def is_automated(address):
+    return bool(AUTOMATED_SENDER.search(address.split("@", 1)[0])) if address else True
+
+
+class CategoryIndex:
+    """Sender and subject of every Inbox message, kept on this Mac (0600) so tabs can be
+    sorted locally: iCloud's own search can't express these rules reliably. Built once,
+    newest first, on its own IMAP connection; after that only new messages are fetched."""
+
+    def __init__(self, mail):
+        self.mail = mail
+        self.lane = Lane(mail.user, mail.password)
+        self.lock = threading.Lock()
+        self.refreshing = threading.Lock()
+        self.entries = {}       # uid -> [sender name + address, address, subject], lowercase
+        self.unseen = set()
+        self.uidvalidity = None
+        self.total = 0
+        self.complete = False
+        self.refreshed_at = 0.0
+        self._memo = (None, None)
+        try:
+            with open(INDEX_FILE) as f:
+                saved = json.load(f)
+            if saved.get("email") == mail.user:
+                self.entries = {int(k): v for k, v in saved["entries"].items()}
+                self.uidvalidity = saved.get("uidvalidity")
+                self.total = len(self.entries)
+        except (FileNotFoundError, json.JSONDecodeError, KeyError, ValueError):
+            pass
+
+    def save(self):
+        with self.lock:
+            data = {"email": self.mail.user, "uidvalidity": self.uidvalidity,
+                    "entries": {str(k): v for k, v in self.entries.items()}}
+        _write_private(INDEX_FILE, json.dumps(data, separators=(",", ":")).encode())
+
+    def status(self):
+        return {"indexed": len(self.entries), "total": self.total, "complete": self.complete}
+
+    def refresh_soon(self, max_age=45):
+        if time.time() - self.refreshed_at > max_age:
+            threading.Thread(target=self.refresh, daemon=True).start()
+
+    def refresh(self):
+        if not self.refreshing.acquire(blocking=False):
+            return  # one already running
+        try:
+            self.lane.run(self._refresh)
+            self.refreshed_at = time.time()
+        except Exception as e:
+            print(f"warning: category index refresh failed: {e}", file=sys.stderr)
+        finally:
+            self.refreshing.release()
+
+    def _refresh(self, c):
+        c.select(mbox("INBOX"), readonly=True)
+        uidvalidity = (c.response("UIDVALIDITY")[1] or [None])[0]
+        uidvalidity = uidvalidity.decode() if isinstance(uidvalidity, bytes) else uidvalidity
+        _, d = c.uid("SEARCH", "ALL")
+        current = {int(x) for x in (d[0] or b"").split()}
+        _, d = c.uid("SEARCH", "UNSEEN")
+        unseen = {int(x) for x in (d[0] or b"").split()}
+        with self.lock:
+            if uidvalidity != self.uidvalidity:  # mailbox was rebuilt: UIDs mean something else now
+                self.entries, self.uidvalidity = {}, uidvalidity
+            for gone in set(self.entries) - current:
+                del self.entries[gone]
+            self.unseen, self.total = unseen, len(current)
+            new = sorted(current - set(self.entries), reverse=True)  # newest first
+        for i in range(0, len(new), 500):
+            _, data = c.uid("FETCH", ",".join(map(str, new[i:i + 500])),
+                            "(UID BODY.PEEK[HEADER.FIELDS (FROM SUBJECT)])")
+            rows = {}
+            for uid, info in parse_fetch(data).items():
+                h = email.message_from_bytes(part_by_prefix(info["parts"], "BODY[HEADER") or b"", policy=policy.default)
+                frm = (addresses(h, "From") or [{"name": "", "email": ""}])[0]
+                rows[uid] = [f"{frm['name']} {frm['email']}".lower(), frm["email"].lower(), safe_header(h, "Subject").lower()]
+            with self.lock:
+                self.entries.update(rows)
+            if i % 2500 == 0:
+                self.save()
+        self.complete = True
+        self.save()
+
+    def assignments(self, categories):
+        """uid -> category id (or None) for the current rules; memoized."""
+        rules = [(c["id"], KeywordMatcher(c["keywords"]), c.get("people", False))
+                 for c in categories if c.get("enabled")]
+        with self.lock:
+            key = (json.dumps(categories, sort_keys=True), len(self.entries), max(self.entries, default=0))
+            if self._memo[0] == key:
+                return self._memo[1]
+            items = list(self.entries.items())
+        result = {}
+        for uid, (sender, address, subject) in items:
+            text = f"{sender} {subject}"
+            tokens = set(WORD_RE.findall(text))
+            automated = None
+            for cid, matcher, people in rules:
+                if people and automated is None:
+                    automated = is_automated(address)
+                if matcher.matches(text, tokens) or (people and not automated):
+                    result[uid] = cid
+                    break
+        with self.lock:
+            self._memo = (key, result)
+        return result
+
+    def uids_in(self, category, categories):
+        return sorted((u for u, c in self.assignments(categories).items() if c == category), reverse=True)
+
+    def unread_counts(self, categories):
+        assigned = self.assignments(categories)
+        counts = {}
+        with self.lock:
+            unseen = set(self.unseen)
+        for uid in unseen:
+            cid = assigned.get(uid)
+            if cid:
+                counts[cid] = counts.get(cid, 0) + 1
+        return counts
+
+    def note_seen(self, uids, seen):
+        with self.lock:
+            (self.unseen.difference_update if seen else self.unseen.update)(int(u) for u in uids)
 
 
 def keychain_get(account):
@@ -409,6 +647,11 @@ LIST_FETCH_ITEMS = (
     "BODY.PEEK[HEADER.FIELDS (FROM TO SUBJECT DATE CONTENT-TYPE CONTENT-TRANSFER-ENCODING)] "
     "BODY.PEEK[TEXT]<0.4096>)"
 )
+LIST_HEADER_ITEMS = (  # same as LIST_FETCH_ITEMS minus the preview text, which is slow for older mail
+    "(UID FLAGS INTERNALDATE RFC822.SIZE "
+    "BODY.PEEK[HEADER.FIELDS (FROM TO SUBJECT DATE CONTENT-TYPE CONTENT-TRANSFER-ENCODING)])"
+)
+PREVIEW_ITEMS = "(UID BODY.PEEK[HEADER.FIELDS (CONTENT-TYPE CONTENT-TRANSFER-ENCODING)] BODY.PEEK[TEXT]<0.4096>)"
 LIST_RE = re.compile(rb'^\((?P<flags>[^)]*)\) (?P<delim>"(?:[^"\\]|\\.)*"|NIL) (?P<name>.*)$')
 FETCH_START = re.compile(rb"^\d+ \(")
 META_UID = re.compile(rb"\bUID (\d+)")
@@ -659,9 +902,11 @@ class Mail:
         self.password = password
         self.main = Lane(self.user, password)   # message list, reading, actions
         self.side = Lane(self.user, password)   # folder list and unread counts
+        self.index = CategoryIndex(self)        # its own connection, for sorting tabs
         self.lock = self.main.lock
         self.roles = {}
         self.raw_cache = OrderedDict()
+        self.previews = OrderedDict()  # (folder, uid) -> preview text
         self._folders, self._folders_at = None, 0.0
 
     # connection management ---------------------------------------------------
@@ -679,6 +924,7 @@ class Mail:
         """Sign in on both connections and load folders while the window is still opening."""
         threading.Thread(target=lambda: self._quietly(lambda: self.run(lambda c: None)), daemon=True).start()
         threading.Thread(target=lambda: self._quietly(self.folders), daemon=True).start()
+        threading.Thread(target=self.index.refresh, daemon=True).start()
 
     @staticmethod
     def _quietly(fn):
@@ -755,8 +1001,10 @@ class Mail:
             raise MailError(f"Your account has no {role} folder")
         return self.roles[role]
 
-    def list_messages(self, folder, page=0, query=""):
+    def list_messages(self, folder, page=0, query="", category=""):
         def op(c):
+            if category and folder == "INBOX" and not query:
+                return category_page(c)
             if not query:
                 return newest_page(c)
             self._select(c, folder)
@@ -773,12 +1021,20 @@ class Mail:
                 raise MailError("Search failed")
             uids = sorted((int(x) for x in (d[0] or b"").split()), reverse=True)
             chunk = uids[page * PAGE_SIZE:(page + 1) * PAGE_SIZE]
-            msgs = []
+            msgs, pending = self._fast_page(c, folder, chunk)
+            return {"folder": folder, "page": page, "pageSize": PAGE_SIZE, "total": len(uids),
+                    "messages": msgs, "previewsPending": pending}
+
+        def category_page(c):
+            self.index.refresh_soon()
+            uids = self.index.uids_in(category, load_settings()["categories"])
+            chunk = uids[page * PAGE_SIZE:(page + 1) * PAGE_SIZE]
             if chunk:
-                typ, data = c.uid("FETCH", ",".join(map(str, chunk)), LIST_FETCH_ITEMS)
-                parsed = parse_fetch(data)
-                msgs = [summarize(u, folder, parsed[u]) for u in chunk if u in parsed]
-            return {"folder": folder, "page": page, "pageSize": PAGE_SIZE, "total": len(uids), "messages": msgs}
+                self._select(c, folder)
+            msgs, pending = self._fast_page(c, folder, chunk)
+            return {"folder": folder, "category": category, "page": page, "pageSize": PAGE_SIZE,
+                    "total": len(uids), "messages": msgs, "previewsPending": pending,
+                    "indexing": self.index.status()}
 
         def newest_page(c):
             # Without a search, page by message number: no need to download every UID.
@@ -820,6 +1076,8 @@ class Mail:
                 self._select(c, folder)
                 c.uid("STORE", str(uid), "+FLAGS.SILENT", "(\\Seen)")
                 flags.append("\\Seen")
+                if folder == "INBOX":
+                    self.index.note_seen([uid], True)
             return raw, flags
         raw, flags = self.run(op)
         msg = email.message_from_bytes(raw, policy=policy.default)
@@ -898,6 +1156,8 @@ class Mail:
         if flag not in ("\\Seen", "\\Flagged"):
             raise MailError("Unsupported flag")
         uidstr = uid_set(uids)
+        if folder == "INBOX" and flag == "\\Seen":
+            self.index.note_seen(uidstr.split(","), on)
 
         def op(c):
             self._select(c, folder)
@@ -931,6 +1191,82 @@ class Mail:
             for u in uidstr.split(","):
                 self.raw_cache.pop((folder, int(u)), None)
         self.run(op)
+
+    def _fast_page(self, c, folder, chunk):
+        """Summaries without preview text (fast); previews come from previews()."""
+        if not chunk:
+            return [], []
+        typ, data = c.uid("FETCH", ",".join(map(str, chunk)), LIST_HEADER_ITEMS)
+        parsed = parse_fetch(data)
+        msgs, pending = [], []
+        for u in chunk:
+            if u not in parsed:
+                continue
+            m = summarize(u, folder, parsed[u])
+            m["snippet"] = self.previews.get((folder, u), "")
+            if (folder, u) not in self.previews:
+                pending.append(u)
+            msgs.append(m)
+        return msgs, pending
+
+    def load_previews(self, folder, uids):
+        uidstr = uid_set(uids[:100])
+
+        def op(c):
+            self.side.select(c, folder)
+            _, data = c.uid("FETCH", uidstr, PREVIEW_ITEMS)
+            out = {}
+            for uid, info in parse_fetch(data).items():
+                try:
+                    text = snippet_from(part_by_prefix(info["parts"], "BODY[HEADER") or b"",
+                                        info["parts"].get("BODY[TEXT]") or b"")
+                except Exception:
+                    text = ""
+                out[uid] = text
+                self.previews[(folder, uid)] = text
+            while len(self.previews) > 20000:
+                self.previews.popitem(last=False)
+            return out
+        return self.side.run(op)
+
+    def categories_status(self):
+        self.index.refresh_soon()
+        return {"indexing": self.index.status(),
+                "unread": self.index.unread_counts(load_settings()["categories"])}
+
+    def mark_all_read(self, folder, category=""):
+        def op(c):
+            self._select(c, folder)
+            if category and folder == "INBOX":
+                with self.index.lock:
+                    unseen = set(self.index.unseen)
+                uids = [u for u in self.index.uids_in(category, load_settings()["categories"]) if u in unseen]
+            else:
+                _, d = c.uid("SEARCH", "UNSEEN")
+                uids = [int(x) for x in (d[0] or b"").split()]
+            for i in range(0, len(uids), 500):
+                c.uid("STORE", ",".join(map(str, uids[i:i + 500])), "+FLAGS.SILENT", "(\\Seen)")
+            return uids
+        uids = self.run(op)
+        if folder == "INBOX":
+            self.index.note_seen(uids, True)
+        self._folders_at = 0  # unread counts changed
+        return {"marked": len(uids)}
+
+    def empty_folder(self, folder):
+        if folder not in (self.roles.get("trash"), self.roles.get("junk")):
+            raise MailError("Only Trash and Spam can be emptied")
+
+        def op(c):
+            count = self.main.select(c, folder, fresh=True) or 0
+            if count:
+                c.store("1:*", "+FLAGS.SILENT", "(\\Deleted)")
+                c.expunge()
+            self.raw_cache.clear()
+            return count
+        deleted = self.run(op)
+        self._folders_at = 0
+        return {"deleted": deleted}
 
     def delete(self, folder, uids):
         trash = self.role_folder("trash")
@@ -1137,7 +1473,13 @@ def make_handler(app, port):
                 return self._api(mail.folders)
             if path == "/api/messages":
                 return self._api(lambda: mail.list_messages(
-                    qs.get("folder", "INBOX"), max(0, int(qs.get("page", 0))), qs.get("q", "").strip()))
+                    qs.get("folder", "INBOX"), max(0, int(qs.get("page", 0))), qs.get("q", "").strip(),
+                    qs.get("category", "")))
+            if path == "/api/categories":
+                return self._api(mail.categories_status)
+            if path == "/api/previews":
+                return self._api(lambda: mail.load_previews(
+                    qs["folder"], [int(u) for u in qs.get("uids", "").split(",") if u.isdigit()]))
             if path == "/api/message":
                 return self._api(lambda: mail.get_message(qs["folder"], int(qs["uid"])))
             if path == "/api/attachment":
@@ -1185,6 +1527,8 @@ def make_handler(app, port):
                 "/api/spam": ok(lambda: mail.move(data["folder"], data["uids"], mail.role_folder("junk"))),
                 "/api/delete": ok(lambda: mail.delete(data["folder"], data["uids"])),
                 "/api/send": ok(lambda: mail.send(data)),
+                "/api/mark-all-read": lambda: mail.mark_all_read(data["folder"], data.get("category", "")),
+                "/api/empty": lambda: mail.empty_folder(data["folder"]),
             }
             if path not in routes:
                 return self._json({"error": "Unknown endpoint"}, 404)

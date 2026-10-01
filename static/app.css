@@ -386,6 +386,60 @@ body.no-snippets .row .snippet { display: none; }
 .settings .pill.danger { color: var(--danger); }
 .settings-title { font-size: 16px; font-weight: 500; }
 
+/* ---------- inbox tabs ---------- */
+.tabs { display: flex; flex: none; overflow-x: auto; border-bottom: 1px solid var(--border); padding: 0 8px; scrollbar-width: none; }
+.tabs::-webkit-scrollbar { display: none; }
+.tab {
+  position: relative; display: flex; align-items: center; gap: 10px; height: 48px; padding: 0 18px 0 14px;
+  min-width: 112px; color: var(--muted); font-weight: 500; white-space: nowrap;
+}
+.tab:hover { background: var(--nav-hover); }
+.tab .ic { width: 18px; height: 18px; }
+.tab.on { color: var(--accent); }
+.tab.on::after { content: ""; position: absolute; left: 8px; right: 8px; bottom: 0; height: 3px; border-radius: 3px 3px 0 0; background: var(--accent); }
+.tab .badge { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 10px; background: var(--accent); color: var(--accent-text); }
+.index-note { display: flex; align-items: center; gap: 10px; padding: 10px 16px; font-size: 13px; color: var(--muted); border-bottom: 1px solid var(--border); }
+
+/* ---------- toolbar extras ---------- */
+.select-group { display: inline-flex; align-items: center; }
+.caret-btn { width: 18px; height: 40px; display: inline-flex; align-items: center; justify-content: center; color: var(--icon); border-radius: 4px; margin-left: -8px; margin-right: 4px; }
+.caret-btn:hover { background: var(--nav-hover); }
+.caret-btn .ic { width: 18px; height: 18px; }
+.sel-count { font-size: 12px; color: var(--muted); margin-left: 6px; white-space: nowrap; }
+.section-note { color: var(--muted); font-size: 13px; margin: 4px 0 12px; line-height: 1.5; }
+.tool-group { border: 1px solid var(--border); border-radius: 12px; margin: 10px 0 14px; overflow: hidden; }
+.tool-group-title { font-size: 12px; font-weight: 600; color: var(--muted); padding: 10px 14px 6px; }
+.tool-row { display: flex; align-items: center; gap: 12px; padding: 4px 10px 4px 14px; border-top: 1px solid var(--border); }
+.tool-row > .ic { color: var(--icon); }
+.tool-row .tool-name { flex: 1; }
+.tool-row.off .tool-name, .tool-row.off > .ic { opacity: .5; }
+.tool-row .icon-btn { width: 32px; height: 32px; }
+
+/* ---------- categories page ---------- */
+.categories-page .section-note { margin-top: 18px; }
+.cat { border: 1px solid var(--border); border-radius: 14px; padding: 10px 12px 12px; margin: 12px 0; background: var(--surface); }
+.cat.off { opacity: .6; }
+.cat.locked { background: var(--row-read); padding-bottom: 10px; }
+.cat-head { display: flex; align-items: center; gap: 8px; }
+.cat-head .spacer { flex: 1; }
+.cat-icon { width: 34px; height: 34px; border-radius: 10px; display: flex; align-items: center; justify-content: center; background: var(--nav-active); color: var(--accent); flex: none; }
+.cat-title { font-weight: 600; margin-left: 4px; }
+.cat-note { color: var(--muted); font-size: 13px; margin-left: 8px; }
+.lock { color: var(--faint); padding: 0 8px; }
+.cat-name { font-weight: 600; font-size: 15px; border: 1px solid transparent; border-radius: 8px; padding: 6px 8px; background: transparent; outline: 0; min-width: 0; width: 220px; }
+.cat-name:hover { border-color: var(--border); }
+.cat-name:focus { border-color: var(--accent); background: var(--bg); }
+.cat-head .icon-btn { width: 32px; height: 32px; }
+.cat-hint { font-size: 13px; color: var(--muted); margin: 8px 0 0 50px; }
+.kws { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 0 50px; padding: 6px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); cursor: text; }
+.kw { display: inline-flex; align-items: center; gap: 2px; padding: 2px 4px 2px 10px; border-radius: 14px; background: var(--nav-active); font-size: 13px; }
+.kw button { width: 20px; height: 20px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: var(--muted); }
+.kw button:hover { background: var(--nav-hover); color: var(--text); }
+.kw .ic { width: 14px; height: 14px; }
+.kw-input { flex: 1; min-width: 160px; border: 0; outline: 0; background: transparent; padding: 4px 6px; font-size: 13px; }
+.cat-actions { display: flex; gap: 10px; margin-top: 16px; }
+.cat-actions .pill .ic { width: 18px; height: 18px; }
+
 /* ---------- update banner ---------- */
 .update-banner {
   display: flex; align-items: center; gap: 12px; flex: none;
@@ -435,6 +489,9 @@ button.account { cursor: pointer; border: 0; padding: 0; }
 
 /* ---------- small screens ---------- */
 @media (max-width: 860px) {
+  .tab { min-width: 0; padding: 0 12px; }
+  .kws, .cat-hint { margin-left: 0; }
+  .cat-name { width: 140px; }
   .brand span:last-child { display: none; }
   .brand { width: auto; }
   .sidebar {
