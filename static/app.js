@@ -30,6 +30,8 @@ const ICONS = {
   download: "M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z",
   minimize: "M6 19h12v2H6z",
   maximize: "M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z",
+  settings: "M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.488.488 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z",
+  image: "M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z",
   file: "M6 2c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6H6zm7 7V3.5L18.5 9H13z",
 };
 const icon = (name, cls = "") => `<svg class="ic ${cls}" viewBox="0 0 24 24" aria-hidden="true"><path d="${ICONS[name]}"/></svg>`;
@@ -113,8 +115,11 @@ const state = {
   message: null,
   messageError: null,
   view: "list",
+  settings: {},
+  listFromCache: false,
 };
 let listToken = 0;
+let settingsReturnHash = "#f=INBOX";
 
 const ROLE_LABEL = { inbox: "Inbox", drafts: "Drafts", sent: "Sent", archive: "Archive", junk: "Spam", trash: "Trash" };
 const folderLabel = (name) => {
@@ -140,6 +145,12 @@ function go(change) {
 }
 
 async function route() {
+  if (location.hash === "#settings") {
+    state.view = "settings";
+    document.body.classList.remove("nav-open");
+    render();
+    return;
+  }
   const h = readHash();
   const listChanged = h.folder !== state.folder || h.page !== state.page || h.query !== state.query || !state.list;
   if (h.folder !== state.folder || h.query !== state.query) { state.selected.clear(); state.cursor = 0; }
@@ -217,7 +228,9 @@ async function openMessage(uid) {
 // ------------------------------------------------------------------ rendering
 function render() {
   renderToolbar();
-  if (state.view === "message") renderMessage(); else renderList();
+  if (state.view === "settings") renderSettings();
+  else if (state.view === "message") renderMessage();
+  else renderList();
 }
 
 function renderFolders() {
@@ -247,6 +260,11 @@ function renderToolbar() {
     out.push(btn("delete", "trash", inRole("trash") ? "Delete forever (#)" : "Delete (#)"));
     return out.join("");
   };
+
+  if (state.view === "settings") {
+    tb.innerHTML = `${btn("closeSettings", "back", "Back to mail (Esc)")}<span class="settings-title">Settings</span>`;
+    return;
+  }
 
   if (state.view === "message") {
     const msgs = list?.messages || [];
@@ -334,7 +352,7 @@ function renderMessage() {
 
   const from = m.from[0] || { name: "", email: "" };
   const trusted = store.get("trustedSenders", []);
-  const allowImages = m.showImages || trusted.includes(from.email?.toLowerCase());
+  const allowImages = m.showImages || state.settings.remoteImages || trusted.includes(from.email?.toLowerCase());
   const hasRemote = m.html && remoteContent(m.html);
   const recips = [...m.to.map((a) => ["to", a]), ...m.cc.map((a) => ["cc", a])];
   const recipText = [m.to.length ? `to ${listNames(m.to)}` : "", m.cc.length ? `cc ${listNames(m.cc)}` : ""].filter(Boolean).join(", ");
@@ -702,6 +720,7 @@ document.addEventListener("click", (e) => {
     case "prevPage": go({ page: state.page - 1, uid: null }); break;
     case "nextPage": go({ page: state.page + 1, uid: null }); break;
     case "back": go({ uid: null }); break;
+    case "closeSettings": closeSettings(); break;
     case "newer": case "older": stepMessage(action === "older" ? 1 : -1); break;
     case "archive": moveAction("archive"); break;
     case "spam": moveAction("spam"); break;
@@ -764,6 +783,10 @@ function onKey(e) {
     return;
   }
   if (!$("#help").classList.contains("hidden")) { if (e.key === "Escape" || e.key === "?") $("#help").classList.add("hidden"); return; }
+  if (state.view === "settings") {
+    if (e.key === "Escape") { e.preventDefault(); closeSettings(); }
+    return;
+  }
   const msgView = state.view === "message";
   const k = e.key;
   const handlers = {
@@ -864,10 +887,7 @@ function renderSetup() {
 function showAccountMenu(anchor) {
   showMenu(anchor, state.me.email, [{
     label: "Sign out", icon: "close",
-    run: async () => {
-      if (!confirm("Sign out of your iCloud email? Your password will be removed from this Mac's Keychain.")) return;
-      try { await api("/api/signout", {}); location.reload(); } catch (e) { toast(e.message); }
-    },
+    run: signOut,
   }]);
 }
 
@@ -909,8 +929,184 @@ function updateStatus(stateName, message) {
   }
 }
 
-// Hooks for the native Inbox.app wrapper (⌘N, mailto: links, updates).
-window.inboxApp = { compose: (prefill) => state.me && openCompose(prefill || {}), updateAvailable, updateStatus };
+// ------------------------------------------------------------------ appearance
+const ACCENTS = [
+  ["Blue", "#0b57d0"], ["Purple", "#7c3aed"], ["Pink", "#db2777"], ["Red", "#dc2626"],
+  ["Orange", "#ea580c"], ["Green", "#16a34a"], ["Teal", "#0d9488"], ["Graphite", "#4b5563"],
+];
+const BACKGROUNDS = [
+  ["none", "None"], ["aurora", "Aurora"], ["sunset", "Sunset"], ["ocean", "Ocean"],
+  ["forest", "Forest"], ["sand", "Sand"], ["graphite", "Graphite"],
+];
+let backgroundVersion = Date.now();
+
+const rgb = (hex) => { const n = parseInt(hex.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+const mix = (a, b, t) => "#" + rgb(a).map((v, i) => Math.round(v + (rgb(b)[i] - v) * t).toString(16).padStart(2, "0")).join("");
+function luminance(hex) {
+  const [r, g, b] = rgb(hex).map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+const textOn = (hex) => (luminance(hex) > 0.4 ? "#1f1f1f" : "#ffffff");
+
+function applyAppearance(s) {
+  const root = document.documentElement;
+  if (s.theme === "light" || s.theme === "dark") root.dataset.theme = s.theme; else delete root.dataset.theme;
+  window.webkit?.messageHandlers?.appearance?.postMessage(s.theme || "system");
+
+  // Derive every accent-tinted color for both light and dark mode, keeping text readable.
+  const a = /^#[0-9a-f]{6}$/i.test(s.accent || "") ? s.accent : "#0b57d0";
+  const light = luminance(a) > 0.45 ? mix(a, "#000000", 0.35) : a;
+  const dark = luminance(a) < 0.3 ? mix(a, "#ffffff", 0.55) : a;
+  const vars = {
+    "--l-accent": light, "--l-accent-text": textOn(light),
+    "--l-nav-active": mix(a, "#ffffff", 0.8), "--l-compose": mix(a, "#ffffff", 0.72),
+    "--l-compose-hover": mix(a, "#ffffff", 0.64), "--l-row-selected": mix(a, "#ffffff", 0.72),
+    "--d-accent": dark, "--d-accent-text": textOn(dark),
+    "--d-nav-active": mix(a, "#1d1f23", 0.62), "--d-compose": mix(a, "#1d1f23", 0.55),
+    "--d-compose-hover": mix(a, "#1d1f23", 0.45), "--d-row-selected": mix(a, "#1d1f23", 0.6),
+  };
+  for (const [k, v] of Object.entries(vars)) root.style.setProperty(k, v);
+
+  root.classList.toggle("text-small", s.textSize === "small");
+  root.classList.toggle("text-large", s.textSize === "large");
+  document.body.classList.toggle("compact", s.density === "compact");
+  document.body.classList.toggle("no-snippets", s.snippets === false);
+
+  const layer = $("#bgLayer");
+  const bg = s.background || "none";
+  layer.className = "bg-layer" + (bg !== "none" && bg !== "image" ? ` bg-${bg}` : "");
+  layer.style.backgroundImage = bg === "image" ? `url("/background?v=${backgroundVersion}")` : "";
+  layer.style.setProperty("--bg-dim", String((s.backgroundDim ?? 35) / 100));
+  document.body.classList.toggle("has-bg", bg !== "none");
+}
+
+// ------------------------------------------------------------------ settings page
+function openSettings() {
+  if (location.hash !== "#settings") settingsReturnHash = location.hash || "#f=INBOX";
+  location.hash = "#settings";
+}
+function closeSettings() {
+  location.hash = settingsReturnHash;
+}
+
+async function updateSettings(changes, { rerender = true } = {}) {
+  Object.assign(state.settings, changes);
+  applyAppearance(state.settings);
+  if (rerender && state.view === "settings") renderSettings();
+  try {
+    await api("/api/settings", changes);
+  } catch (e) {
+    // Rejected: go back to what's actually saved.
+    toast(e.message);
+    state.settings = await api("/api/settings").catch(() => state.settings);
+    applyAppearance(state.settings);
+    if (state.view === "settings") renderSettings();
+  }
+}
+
+function renderSettings() {
+  const s = state.settings;
+  const seg = (key, options) => `<div class="segmented" role="radiogroup">${options.map(([v, label]) =>
+    `<button role="radio" aria-checked="${s[key] === v}" class="${s[key] === v ? "on" : ""}" data-set="${key}" data-value="${v}">${label}</button>`).join("")}</div>`;
+  const toggle = (key) => `<label class="switch"><input type="checkbox" data-toggle="${key}" ${s[key] ? "checked" : ""}><span></span></label>`;
+  const isPreset = ACCENTS.some(([, hex]) => hex === s.accent);
+  const native = Boolean(window.webkit?.messageHandlers?.update);
+
+  $("#view").innerHTML = `<div class="settings">
+    <h2>Appearance</h2>
+    <div class="setting"><div class="label"><b>Theme</b><span>System follows your Mac's light or dark mode.</span></div>
+      ${seg("theme", [["system", "System"], ["light", "Light"], ["dark", "Dark"]])}</div>
+    <div class="setting stack"><div class="label"><b>Accent color</b><span>Used for buttons, highlights and the selected folder.</span></div>
+      <div class="swatches">
+        ${ACCENTS.map(([name, hex]) => `<button class="swatch ${s.accent === hex ? "on" : ""}" style="background:${hex}" title="${name}" aria-label="${name}" data-set="accent" data-value="${hex}"></button>`).join("")}
+        <label class="swatch swatch-custom ${isPreset ? "" : "on"}" title="Custom color" ${isPreset ? "" : `style="background:${esc(s.accent)}"`}><input type="color" data-color value="${esc(s.accent)}" aria-label="Custom color"></label>
+      </div></div>
+    <div class="setting stack"><div class="label"><b>Background</b><span>Shown behind the sidebar and top bar.</span></div>
+      <div class="backgrounds">
+        ${BACKGROUNDS.map(([v, label]) => `<button class="bg-tile ${v === "none" ? "none" : `bg-${v}`} ${s.background === v ? "on" : ""}" data-set="background" data-value="${v}">${label}</button>`).join("")}
+        <label class="bg-tile upload ${s.background === "image" ? "on" : ""}" ${s.background === "image" ? `style="background-image:url('/background?v=${backgroundVersion}')"` : ""}>
+          ${s.background === "image" ? "" : icon("image")}<span>${s.background === "image" ? "Your image" : "Choose image…"}</span><input type="file" accept="image/jpeg,image/png,image/webp,image/gif" data-bg-upload></label>
+      </div>
+      ${s.background !== "none" ? `<div class="dim-row"><span>Fade</span><input type="range" min="0" max="85" value="${s.backgroundDim}" data-dim aria-label="Background fade"><span data-dim-label>${s.backgroundDim}%</span></div>` : ""}
+    </div>
+
+    <h2>Layout</h2>
+    <div class="setting"><div class="label"><b>Density</b><span>Compact fits more messages on screen.</span></div>
+      ${seg("density", [["comfortable", "Comfortable"], ["compact", "Compact"]])}</div>
+    <div class="setting"><div class="label"><b>Text size</b></div>
+      ${seg("textSize", [["small", "Small"], ["medium", "Medium"], ["large", "Large"]])}</div>
+    <div class="setting"><div class="label"><b>Message previews</b><span>Show the first line of each message in the list.</span></div>${toggle("snippets")}</div>
+
+    <h2>Privacy</h2>
+    <div class="setting"><div class="label"><b>Load remote images automatically</b><span>Off blocks tracking pixels. You can still show images in any message.</span></div>${toggle("remoteImages")}</div>
+
+    <h2>Account</h2>
+    <div class="setting"><div class="label"><b>${esc(state.me?.email || "")}</b><span>Signed in with an app-specific password.</span></div>
+      <button class="pill danger" data-settings-action="signout">Sign out</button></div>
+    <div class="setting"><div class="label"><b>Inbox ${esc(state.me?.version || "")}</b><span>Updates install automatically when you click Update now.</span></div>
+      ${native ? `<button class="pill" data-settings-action="checkUpdates">Check for updates</button>` : ""}</div>
+  </div>`;
+}
+
+document.addEventListener("click", (e) => {
+  if (state.view !== "settings") return;
+  const set = e.target.closest("[data-set]");
+  if (set) {
+    if (set.dataset.set === "background" && set.dataset.value === "image") return;
+    updateSettings({ [set.dataset.set]: set.dataset.value });
+    return;
+  }
+  const action = e.target.closest("[data-settings-action]")?.dataset.settingsAction;
+  if (action === "signout") signOut();
+  if (action === "checkUpdates") window.webkit?.messageHandlers?.update?.postMessage("check");
+});
+
+document.addEventListener("input", (e) => {
+  if (state.view !== "settings") return;
+  if (e.target.matches("[data-dim]")) {
+    state.settings.backgroundDim = +e.target.value;
+    $("[data-dim-label]").textContent = `${e.target.value}%`;
+    applyAppearance(state.settings);
+  }
+  if (e.target.matches("[data-color]")) applyAppearance({ ...state.settings, accent: e.target.value });
+});
+
+document.addEventListener("change", async (e) => {
+  if (state.view !== "settings") return;
+  const t = e.target;
+  if (t.matches("[data-toggle]")) updateSettings({ [t.dataset.toggle]: t.checked }, { rerender: false });
+  if (t.matches("[data-dim]")) updateSettings({ backgroundDim: +t.value }, { rerender: false });
+  if (t.matches("[data-color]")) updateSettings({ accent: t.value });
+  if (t.matches("[data-bg-upload]") && t.files[0]) {
+    const file = t.files[0];
+    if (file.size > 20 * 1024 * 1024) return toast("Choose an image smaller than 20 MB.");
+    try {
+      const dataUrl = await new Promise((ok, fail) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = fail; r.readAsDataURL(file); });
+      state.settings = await api("/api/background", { data: dataUrl.split(",")[1] });
+      backgroundVersion = Date.now();
+      applyAppearance(state.settings);
+      renderSettings();
+    } catch (err) {
+      toast(err.message);
+    }
+  }
+});
+
+async function signOut() {
+  if (!confirm("Sign out of your iCloud email? Your password will be removed from this Mac's Keychain.")) return;
+  try { await api("/api/signout", {}); location.replace("/"); } catch (e) { toast(e.message); }
+}
+
+function finishBoot() {
+  document.body.classList.remove("booting");
+}
+
+// Hooks for the native Inbox.app wrapper (⌘N, ⌘, mailto: links, updates).
+window.inboxApp = {
+  compose: (prefill) => state.me && openCompose(prefill || {}),
+  openSettings: () => state.me && openSettings(),
+  updateAvailable, updateStatus,
+};
 
 // ------------------------------------------------------------------ boot
 async function boot() {
@@ -932,10 +1128,17 @@ async function boot() {
     go({ query: q, page: 0, uid: null });
   });
   $("#clearSearch").onclick = () => go({ query: "", page: 0, uid: null });
+  $("#settingsBtn").onclick = () => openSettings();
+
+  // Settings and account info are inlined into the page by the server (no round trip).
+  let bootData = {};
+  try { bootData = JSON.parse($("#boot")?.textContent || "{}"); } catch { /* fall back to the API */ }
+  state.settings = bootData.settings || await api("/api/settings").catch(() => ({}));
+  applyAppearance(state.settings);
 
   try {
-    const me = await api("/api/me");
-    if (me.setupRequired) { document.body.classList.add("needs-setup"); renderSetup(); return; }
+    const me = bootData.me || await api("/api/me");
+    if (me.setupRequired) { document.body.classList.add("needs-setup"); renderSetup(); finishBoot(); return; }
     state.me = me;
     const acct = $("#account");
     acct.outerHTML = avatar({ name: me.name, email: me.email }, "account").replace("<span", '<button type="button"').replace(/<\/span>$/, "</button>");
@@ -944,10 +1147,25 @@ async function boot() {
     btn.addEventListener("click", (e) => { e.stopPropagation(); showAccountMenu(btn); });
   } catch (e) {
     $("#view").innerHTML = `<div class="error-box">${esc(e.message)}</div>`;
+    finishBoot();
     return;
   }
-  await loadFolders();
-  route();
+
+  // Show the last-seen folders and Inbox right away, then refresh both in the background.
+  const cached = await api("/api/cache").catch(() => ({}));
+  if (cached.folders) {
+    state.folders = cached.folders;
+    state.roles = Object.fromEntries(state.folders.filter((f) => f.role).map((f) => [f.role, f.name]));
+  }
+  const h = readHash();
+  if (cached.inbox && h.folder === "INBOX" && !h.page && !h.query && !h.uid) {
+    state.list = cached.inbox;
+    state.listFromCache = true;
+  }
+  loadFolders();  // runs on its own connection, in parallel with the message list
+  await route();
+  finishBoot();
+  if (state.listFromCache) { state.listFromCache = false; loadList({ quiet: true }); }
 
   // Poll for new mail while the tab is visible.
   setInterval(() => {

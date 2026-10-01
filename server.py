@@ -75,6 +75,135 @@ def save_config(cfg):
         json.dump(cfg, f, indent=2)
 
 
+# ---------------------------------------------------------------- appearance settings
+
+SETTINGS_FILE = os.path.join(CONFIG_DIR, "settings.json")
+BACKGROUND_FILE = os.path.join(CONFIG_DIR, "background")
+CACHE_FILE = os.path.join(CONFIG_DIR, "cache.json")
+DEFAULT_SETTINGS = {
+    "theme": "system",          # system | light | dark
+    "accent": "#0b57d0",
+    "background": "none",       # none | aurora | sunset | ocean | forest | sand | graphite | image
+    "backgroundDim": 35,        # 0–85: how much the background is faded behind text
+    "density": "comfortable",   # comfortable | compact
+    "textSize": "medium",       # small | medium | large
+    "snippets": True,
+    "remoteImages": False,
+}
+SETTING_CHOICES = {
+    "theme": {"system", "light", "dark"},
+    "background": {"none", "aurora", "sunset", "ocean", "forest", "sand", "graphite", "image"},
+    "density": {"comfortable", "compact"},
+    "textSize": {"small", "medium", "large"},
+}
+IMAGE_TYPES = {  # magic bytes → MIME type; SVG is deliberately not accepted
+    b"\x89PNG\r\n\x1a\n": "image/png", b"\xff\xd8\xff": "image/jpeg",
+    b"GIF87a": "image/gif", b"GIF89a": "image/gif",
+}
+
+
+def _write_private(path, data):
+    os.makedirs(CONFIG_DIR, mode=0o700, exist_ok=True)
+    tmp = f"{path}.{os.getpid()}.tmp"
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "wb") as f:
+        f.write(data)
+    os.replace(tmp, path)
+
+
+def load_settings():
+    try:
+        with open(SETTINGS_FILE) as f:
+            saved = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        saved = {}
+    return {**DEFAULT_SETTINGS, **{k: v for k, v in saved.items() if k in DEFAULT_SETTINGS}}
+
+
+_settings_lock = threading.Lock()
+
+
+def save_settings(changes):
+    with _settings_lock:  # requests run on parallel threads; don't lose a concurrent change
+        return _save_settings(changes)
+
+
+def _save_settings(changes):
+    current = load_settings()
+    for key, value in changes.items():
+        if key not in DEFAULT_SETTINGS:
+            continue
+        if key in SETTING_CHOICES and value not in SETTING_CHOICES[key]:
+            raise MailError(f"Invalid value for {key}")
+        if key == "accent" and not (isinstance(value, str) and re.fullmatch(r"#[0-9a-fA-F]{6}", value)):
+            raise MailError("Invalid accent color")
+        if key == "backgroundDim":
+            value = max(0, min(85, int(value)))
+        if key in ("snippets", "remoteImages"):
+            value = bool(value)
+        if key == "background" and value == "image" and not os.path.exists(BACKGROUND_FILE):
+            raise MailError("Choose an image first")
+        current[key] = value
+    _write_private(SETTINGS_FILE, json.dumps(current, indent=2).encode())
+    return current
+
+
+def image_type(data):
+    for magic, mime in IMAGE_TYPES.items():
+        if data.startswith(magic):
+            return mime
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    return None
+
+
+def save_background(b64):
+    try:
+        data = base64.b64decode(b64, validate=True)
+    except (ValueError, TypeError):
+        raise MailError("That file couldn't be read")
+    if len(data) > 20 * 1024 * 1024:
+        raise MailError("Choose an image smaller than 20 MB")
+    if not image_type(data):
+        raise MailError("Choose a JPEG, PNG, WebP or GIF image")
+    _write_private(BACKGROUND_FILE, data)
+    return save_settings({"background": "image"})
+
+
+# ---------------------------------------------------------------- startup cache
+# The last-seen folder list and first page of the Inbox, so the app can show mail
+# instantly at launch and refresh in the background. Stays on this Mac (0600).
+
+_cache_lock = threading.Lock()
+
+
+def save_cache(cfg, key, value):
+    with _cache_lock:
+        try:
+            cache = load_cache(cfg)
+            cache[key] = value
+            cache["email"] = cfg.get("email")
+            _write_private(CACHE_FILE, json.dumps(cache).encode())
+        except Exception as e:
+            print(f"warning: couldn't save cache: {e}", file=sys.stderr)
+
+
+def load_cache(cfg):
+    try:
+        with open(CACHE_FILE) as f:
+            cache = json.load(f)
+        return cache if cache.get("email") == cfg.get("email") else {}
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
+def clear_cache():
+    try:
+        os.remove(CACHE_FILE)
+    except FileNotFoundError:
+        pass
+
+
 def keychain_get(account):
     r = subprocess.run(
         ["security", "find-generic-password", "-s", KEYCHAIN_SERVICE, "-a", account, "-w"],
@@ -203,6 +332,7 @@ def sign_in(app, data):
     cfg.update(email=addr, name=name)
     save_config(cfg)
     app["mail"] = Mail(cfg, password)
+    app["mail"].warm_up()
     checkin(cfg, force=True)
 
 
@@ -219,6 +349,7 @@ def sign_out(app):
         print(f"warning: couldn't remove this install from the user log: {e}", file=sys.stderr)
     cfg.pop("email", None)
     cfg.pop("last_checkin", None)
+    clear_cache()
     save_config(cfg)
     app["mail"] = None
 
@@ -273,6 +404,11 @@ def uid_set(uids):
     return ",".join(map(str, clean))
 
 
+LIST_FETCH_ITEMS = (
+    "(UID FLAGS INTERNALDATE RFC822.SIZE "
+    "BODY.PEEK[HEADER.FIELDS (FROM TO SUBJECT DATE CONTENT-TYPE CONTENT-TRANSFER-ENCODING)] "
+    "BODY.PEEK[TEXT]<0.4096>)"
+)
 LIST_RE = re.compile(rb'^\((?P<flags>[^)]*)\) (?P<delim>"(?:[^"\\]|\\.)*"|NIL) (?P<name>.*)$')
 FETCH_START = re.compile(rb"^\d+ \(")
 META_UID = re.compile(rb"\bUID (\d+)")
@@ -469,24 +605,17 @@ def build_search(query):
 
 # ---------------------------------------------------------------- mail client
 
-class Mail:
-    def __init__(self, cfg, password):
-        self.cfg = cfg
-        self.user = cfg["email"]
-        self.password = password
+class Lane:
+    """One IMAP connection with its own lock. Inbox uses two, so slow folder counts
+    never hold up opening the message list."""
+
+    def __init__(self, user, password):
+        self.user, self.password = user, password
         self.lock = threading.RLock()
         self.conn = None
         self.selected = None
-        self.roles = {}
-        self.raw_cache = OrderedDict()
 
-    # connection management ---------------------------------------------------
-    def _connect(self):
-        c = imaplib.IMAP4_SSL(IMAP_HOST, IMAP_PORT, ssl_context=ssl_context(), timeout=60)
-        c.login(self.user, self.password)
-        self.conn, self.selected = c, None
-
-    def _drop(self):
+    def drop(self):
         try:
             if self.conn:
                 self.conn.logout()
@@ -499,74 +628,125 @@ class Mail:
             for attempt in (0, 1):
                 try:
                     if self.conn is None:
-                        self._connect()
+                        c = imaplib.IMAP4_SSL(IMAP_HOST, IMAP_PORT, ssl_context=ssl_context(), timeout=60)
+                        c.login(self.user, self.password)
+                        self.conn, self.selected = c, None
                     return fn(self.conn)
                 except (imaplib.IMAP4.abort, OSError, EOFError):
-                    self._drop()
+                    self.drop()
                     if attempt:
                         raise MailError("Lost connection to iCloud. Check your network and try again.")
 
-    def _select(self, c, folder):
-        if self.selected == folder:
+    def select(self, c, folder, fresh=False):
+        """Open a folder; returns its message count when it (re)selects."""
+        if self.selected == folder and not fresh:
             c.noop()  # pick up new mail on the already-selected folder
-            return
-        typ, _ = c.select(mbox(folder))
+            return None
+        typ, data = c.select(mbox(folder))
         if typ != "OK":
             raise MailError(f"Couldn't open folder “{folder}”")
         self.selected = folder
+        try:
+            return int(data[0])
+        except (TypeError, ValueError, IndexError):
+            return None
+
+
+class Mail:
+    def __init__(self, cfg, password):
+        self.cfg = cfg
+        self.user = cfg["email"]
+        self.password = password
+        self.main = Lane(self.user, password)   # message list, reading, actions
+        self.side = Lane(self.user, password)   # folder list and unread counts
+        self.lock = self.main.lock
+        self.roles = {}
+        self.raw_cache = OrderedDict()
+        self._folders, self._folders_at = None, 0.0
+
+    # connection management ---------------------------------------------------
+    def _drop(self):
+        self.main.drop()
+        self.side.drop()
+
+    def run(self, fn):
+        return self.main.run(fn)
+
+    def _select(self, c, folder):
+        self.main.select(c, folder)
+
+    def warm_up(self):
+        """Sign in on both connections and load folders while the window is still opening."""
+        threading.Thread(target=lambda: self._quietly(lambda: self.run(lambda c: None)), daemon=True).start()
+        threading.Thread(target=lambda: self._quietly(self.folders), daemon=True).start()
+
+    @staticmethod
+    def _quietly(fn):
+        try:
+            fn()
+        except Exception as e:
+            print(f"warning: warm-up failed: {e}", file=sys.stderr)
 
     # operations ---------------------------------------------------------------
-    def folders(self):
-        def op(c):
-            typ, data = c.list()
-            if typ != "OK":
-                raise MailError("Couldn't list folders")
-            out = []
-            for line in data:
-                literal_name = None
-                if isinstance(line, tuple):
-                    line, literal_name = line[0], line[1].decode()
-                m = LIST_RE.match(line or b"")
-                if not m:
-                    continue
-                flags = m.group("flags").decode().split()
-                if any(f.lower() in ("\\noselect", "\\nonexistent") for f in flags):
-                    continue
-                name = literal_name or m.group("name").decode()
-                if name.startswith('"'):
-                    name = name[1:-1].replace('\\"', '"').replace("\\\\", "\\")
-                name = imap_utf7_decode(name)
-                role = None
-                for f in flags:
-                    if f.lower() in ("\\sent", "\\drafts", "\\trash", "\\junk", "\\archive"):
-                        role = f[1:].lower()
-                if name.upper() == "INBOX":
-                    name, role = "INBOX", "inbox"
-                role = role or {
-                    "sent messages": "sent", "sent": "sent", "drafts": "drafts",
-                    "deleted messages": "trash", "trash": "trash", "junk": "junk",
-                    "spam": "junk", "archive": "archive",
-                }.get(name.lower())
-                out.append({"name": name, "role": role, "unread": 0, "total": 0})
+    def folders(self, max_age=5.0):
+        with self.side.lock:
+            # A request that waited for the warm-up (or another tab) reuses its fresh result.
+            if self._folders is not None and time.time() - self._folders_at < max_age:
+                return self._folders
+            self._folders = self.side.run(self._load_folders)
+            self._folders_at = time.time()
+            save_cache(self.cfg, "folders", self._folders)
+            return self._folders
 
-            seen_roles = set()
-            for f in out:
-                if f["role"] in seen_roles:
-                    f["role"] = None
-                elif f["role"]:
-                    seen_roles.add(f["role"])
-                typ, d = c.status(mbox(f["name"]), "(MESSAGES UNSEEN)")
-                if typ == "OK" and d and d[0]:
-                    s = d[0].decode(errors="replace")
-                    if m := re.search(r"UNSEEN (\d+)", s):
-                        f["unread"] = int(m.group(1))
-                    if m := re.search(r"MESSAGES (\d+)", s):
-                        f["total"] = int(m.group(1))
-            order = ["inbox", "drafts", "sent", "archive", "junk", "trash"]
-            out.sort(key=lambda f: (order.index(f["role"]) if f["role"] in order else len(order), f["name"].lower()))
-            self.roles = {f["role"]: f["name"] for f in out if f["role"]}
-            return out
-        return self.run(op)
+    def _load_folders(self, c):
+        typ, data = c.list()
+        if typ != "OK":
+            raise MailError("Couldn't list folders")
+        out = []
+        for line in data:
+            literal_name = None
+            if isinstance(line, tuple):
+                line, literal_name = line[0], line[1].decode()
+            m = LIST_RE.match(line or b"")
+            if not m:
+                continue
+            flags = m.group("flags").decode().split()
+            if any(f.lower() in ("\\noselect", "\\nonexistent") for f in flags):
+                continue
+            name = literal_name or m.group("name").decode()
+            if name.startswith('"'):
+                name = name[1:-1].replace('\\"', '"').replace("\\\\", "\\")
+            name = imap_utf7_decode(name)
+            role = None
+            for f in flags:
+                if f.lower() in ("\\sent", "\\drafts", "\\trash", "\\junk", "\\archive"):
+                    role = f[1:].lower()
+            if name.upper() == "INBOX":
+                name, role = "INBOX", "inbox"
+            role = role or {
+                "sent messages": "sent", "sent": "sent", "drafts": "drafts",
+                "deleted messages": "trash", "trash": "trash", "junk": "junk",
+                "spam": "junk", "archive": "archive",
+            }.get(name.lower())
+            out.append({"name": name, "role": role, "unread": 0, "total": 0})
+
+        seen_roles = set()
+        for f in out:
+            if f["role"] in seen_roles:
+                f["role"] = None
+            elif f["role"]:
+                seen_roles.add(f["role"])
+            typ, d = c.status(mbox(f["name"]), "(MESSAGES UNSEEN)")
+            if typ == "OK" and d and d[0]:
+                s = d[0].decode(errors="replace")
+                if m := re.search(r"UNSEEN (\d+)", s):
+                    f["unread"] = int(m.group(1))
+                if m := re.search(r"MESSAGES (\d+)", s):
+                    f["total"] = int(m.group(1))
+        order = ["inbox", "drafts", "sent", "archive", "junk", "trash"]
+        out.sort(key=lambda f: (order.index(f["role"]) if f["role"] in order else len(order), f["name"].lower()))
+        self.roles = {f["role"]: f["name"] for f in out if f["role"]}
+        return out
 
     def role_folder(self, role):
         if role not in self.roles:
@@ -577,6 +757,8 @@ class Mail:
 
     def list_messages(self, folder, page=0, query=""):
         def op(c):
+            if not query:
+                return newest_page(c)
             self._select(c, folder)
             if query:
                 crit = build_search(query)
@@ -593,15 +775,26 @@ class Mail:
             chunk = uids[page * PAGE_SIZE:(page + 1) * PAGE_SIZE]
             msgs = []
             if chunk:
-                typ, data = c.uid(
-                    "FETCH", ",".join(map(str, chunk)),
-                    "(UID FLAGS INTERNALDATE RFC822.SIZE "
-                    "BODY.PEEK[HEADER.FIELDS (FROM TO SUBJECT DATE CONTENT-TYPE CONTENT-TRANSFER-ENCODING)] "
-                    "BODY.PEEK[TEXT]<0.4096>)",
-                )
+                typ, data = c.uid("FETCH", ",".join(map(str, chunk)), LIST_FETCH_ITEMS)
                 parsed = parse_fetch(data)
                 msgs = [summarize(u, folder, parsed[u]) for u in chunk if u in parsed]
             return {"folder": folder, "page": page, "pageSize": PAGE_SIZE, "total": len(uids), "messages": msgs}
+
+        def newest_page(c):
+            # Without a search, page by message number: no need to download every UID.
+            total = self.main.select(c, folder, fresh=True) or 0
+            hi = total - page * PAGE_SIZE
+            msgs = []
+            if hi >= 1:
+                lo = max(1, hi - PAGE_SIZE + 1)
+                typ, data = c.fetch(f"{lo}:{hi}", LIST_FETCH_ITEMS)
+                parsed = parse_fetch(data)
+                msgs = [summarize(u, folder, parsed[u]) for u in sorted(parsed, reverse=True)]
+            result = {"folder": folder, "page": page, "pageSize": PAGE_SIZE, "total": total, "messages": msgs}
+            if page == 0 and folder == "INBOX":
+                save_cache(self.cfg, "inbox", result)
+            return result
+
         return self.run(op)
 
     def _raw(self, c, folder, uid):
@@ -904,8 +1097,18 @@ def make_handler(app, port):
                     })
                 if not self._authed():
                     return self._send(401, b"Open the app with: python3 server.py", "text/plain")
-                with open(os.path.join(STATIC_DIR, "index.html"), "rb") as f:
-                    return self._send(200, f.read(), "text/html; charset=utf-8")
+                return self._send(200, render_index(app), "text/html; charset=utf-8")
+
+            if path == "/background":
+                # Loaded by CSS (which can't send custom headers), so cookie auth only.
+                if not self._guard(api=False) or not self._authed():
+                    return self._send(403, b"Forbidden", "text/plain")
+                try:
+                    with open(BACKGROUND_FILE, "rb") as f:
+                        data = f.read()
+                except FileNotFoundError:
+                    return self._send(404, b"Not found", "text/plain")
+                return self._send(200, data, image_type(data) or "application/octet-stream")
 
             if path.startswith("/static/"):
                 if not self._guard(api=False):
@@ -923,11 +1126,13 @@ def make_handler(app, port):
 
             mail = app["mail"]
             if path == "/api/me":
-                if not mail:
-                    return self._json({"setupRequired": True})
-                return self._json({"email": cfg["email"], "name": cfg.get("name", "")})
+                return self._json(me_info(app))
+            if path == "/api/settings":
+                return self._json(load_settings())
             if not mail:
                 return self._json({"error": "Not signed in", "setupRequired": True}, 409)
+            if path == "/api/cache":
+                return self._json(load_cache(cfg))
             if path == "/api/folders":
                 return self._api(mail.folders)
             if path == "/api/messages":
@@ -965,6 +1170,10 @@ def make_handler(app, port):
                 return self._api(ok(lambda: sign_in(app, data)))
             if path == "/api/signout":
                 return self._api(ok(lambda: sign_out(app)))
+            if path == "/api/settings":
+                return self._api(lambda: save_settings(data))
+            if path == "/api/background":
+                return self._api(lambda: save_background(data.get("data", "")))
             mail = app["mail"]
             if not mail:
                 return self._json({"error": "Not signed in", "setupRequired": True}, 409)
@@ -982,6 +1191,25 @@ def make_handler(app, port):
             self._api(routes[path])
 
     return Handler
+
+
+def me_info(app):
+    if not app["mail"]:
+        return {"setupRequired": True, "version": APP_VERSION}
+    cfg = app["cfg"]
+    return {"email": cfg["email"], "name": cfg.get("name", ""), "version": APP_VERSION}
+
+
+def render_index(app):
+    """index.html with settings and account info inlined, so the first paint already
+    has the right theme and the page needs no extra request to start."""
+    with open(os.path.join(STATIC_DIR, "index.html"), encoding="utf-8") as f:
+        page = f.read()
+    settings = load_settings()
+    boot = json.dumps({"me": me_info(app), "settings": settings}).replace("</", "<\\/")
+    theme = "" if settings["theme"] == "system" else f' data-theme="{settings["theme"]}"'
+    page = page.replace('<html lang="en">', f'<html lang="en"{theme} style="--boot-accent:{settings["accent"]}">', 1)
+    return page.replace("<!--BOOT-->", f'<script id="boot" type="application/json">{boot}</script>', 1).encode()
 
 
 def watch_parent(pid):
@@ -1012,6 +1240,7 @@ def main():
         password = keychain_get(cfg["email"])
         if password:
             app["mail"] = Mail(cfg, password)
+            app["mail"].warm_up()  # sign in to iCloud while the window opens
 
     try:
         httpd = ThreadingHTTPServer(("127.0.0.1", args.port or cfg.get("port", 8025)), BaseHTTPRequestHandler)

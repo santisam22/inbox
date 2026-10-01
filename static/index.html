@@ -6,8 +6,11 @@
   <title>Mail</title>
   <link rel="stylesheet" href="/static/app.css">
   <script src="/static/app.js" defer></script>
+  <!--BOOT-->
 </head>
-<body>
+<body class="booting">
+  <div class="splash" id="splash" role="status" aria-label="Loading"><div class="spinner big"></div></div>
+  <div class="bg-layer" id="bgLayer" aria-hidden="true"></div>
   <header class="topbar">
     <button class="icon-btn" id="menuBtn" title="Main menu" data-icon="menu"></button>
     <div class="brand"><span class="logo" data-icon="mail"></span><span>Mail</span></div>
@@ -18,6 +21,7 @@
     </form>
     <div class="top-right">
       <button class="icon-btn" id="helpBtn" title="Keyboard shortcuts (?)" data-icon="help"></button>
+      <button class="icon-btn" id="settingsBtn" title="Settings (⌘,)" data-icon="settings"></button>
       <div class="avatar account" id="account"></div>
     </div>
   </header>

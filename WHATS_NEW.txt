@@ -1,1 +1,1 @@
-Inbox now updates itself. You also get a notice before connecting about what Inbox shares.
+Opens faster, with a clean loading screen. New Settings page: themes, accent colors, background images, density and text size.

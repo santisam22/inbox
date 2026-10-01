@@ -58,6 +58,25 @@ for pyarch in aarch64 x86_64; do
            turtle.py lib-dynload/_tkinter*.so )
 done
 
+echo "→ Precompiling the Python modules Inbox uses…"
+# Without bytecode, Python recompiles these on every launch (~0.3 s). Hash-based .pyc
+# files stay valid however the app is copied, and are the same for both architectures.
+PY=$RES/python/arm64/bin/python3
+MODULES=$("$PY" -I -B -c '
+import os, sys
+sys.path.insert(0, sys.argv[1]); import server
+lib = os.path.dirname(os.__file__)
+print("\n".join(sorted({os.path.relpath(m.__file__, lib) for m in list(sys.modules.values())
+    if (getattr(m, "__file__", None) or "").startswith(lib) and m.__file__.endswith(".py")})))' "$ROOT")
+for arch in arm64 x86_64; do
+  print -r -- "$MODULES" | "$PY" -I -B -c '
+import py_compile, sys
+for rel in sys.stdin.read().split():
+    py_compile.compile(f"{sys.argv[1]}/{rel}", doraise=True,
+                       invalidation_mode=py_compile.PycInvalidationMode.UNCHECKED_HASH)' "$RES/python/$arch/lib/python3.13"
+done
+echo "  $(print -r -- "$MODULES" | wc -l | tr -d ' ') modules"
+
 echo "→ Drawing icon…"
 swift macos/make_icon.swift "$BUILD/icon.png"
 ICONSET=$BUILD/AppIcon.iconset

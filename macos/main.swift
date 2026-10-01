@@ -57,6 +57,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate,
         config.websiteDataStore = .default()
         config.userContentController.add(self, name: "badge")
         config.userContentController.add(self, name: "update")
+        config.userContentController.add(self, name: "appearance")
 
         webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = self
@@ -74,8 +75,68 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate,
         window.delegate = self
         window.center()
         window.setFrameAutosaveName("InboxMainWindow")
+        // Match the app's background so nothing flashes white while it starts.
+        window.backgroundColor = NSColor(name: nil) { appearance in
+            appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+                ? NSColor(srgbRed: 0x11 / 255, green: 0x13 / 255, blue: 0x17 / 255, alpha: 1)
+                : NSColor(srgbRed: 0xf6 / 255, green: 0xf8 / 255, blue: 0xfc / 255, alpha: 1)
+        }
+        let look = savedAppearance()
+        applyTheme(look.theme)
         window.makeKeyAndOrderFront(nil)
-        showStatus("Starting…", detail: nil)
+        showSplash(accent: look.accent)
+    }
+
+    // MARK: appearance & loading screen
+
+    /// Theme and accent color from Inbox's settings (written by the Settings page).
+    func savedAppearance() -> (theme: String, accent: String) {
+        let url = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".icloud-mail/settings.json")
+        guard let data = try? Data(contentsOf: url),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return ("system", "#0b57d0") }
+        let accent = (obj["accent"] as? String).flatMap {
+            $0.range(of: "^#[0-9a-fA-F]{6}$", options: .regularExpression) != nil ? $0 : nil
+        } ?? "#0b57d0"
+        return (obj["theme"] as? String ?? "system", accent)
+    }
+
+    /// Light/Dark choice also drives the title bar and the page's prefers-color-scheme.
+    func applyTheme(_ theme: String) {
+        switch theme {
+        case "dark": window.appearance = NSAppearance(named: .darkAqua)
+        case "light": window.appearance = NSAppearance(named: .aqua)
+        default: window.appearance = nil
+        }
+    }
+
+    /// Only a spinner in the app's colors until the inbox is ready (the web page shows
+    /// an identical one, so the hand-off is seamless).
+    func showSplash(accent: String) {
+        func rgb(_ hex: String) -> [Double] {
+            let n = Int(hex.dropFirst(), radix: 16) ?? 0x0b57d0
+            return [Double((n >> 16) & 255), Double((n >> 8) & 255), Double(n & 255)]
+        }
+        func mix(_ hex: String, _ other: Double, _ t: Double) -> String {
+            "#" + rgb(hex).map { String(format: "%02x", Int(($0 + (other - $0) * t).rounded())) }.joined()
+        }
+        func luminance(_ hex: String) -> Double {
+            let c = rgb(hex).map { v -> Double in let x = v / 255; return x <= 0.03928 ? x / 12.92 : pow((x + 0.055) / 1.055, 2.4) }
+            return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+        }
+        let light = luminance(accent) > 0.45 ? mix(accent, 0, 0.35) : accent
+        let dark = luminance(accent) < 0.3 ? mix(accent, 255, 0.55) : accent
+        let html = """
+        <!doctype html><meta charset="utf-8"><style>
+        :root{color-scheme:light dark;--bg:#f6f8fc;--a:\(light)}
+        @media (prefers-color-scheme:dark){:root{--bg:#111317;--a:\(dark)}}
+        html,body{margin:0;height:100%;background:var(--bg)}
+        body{display:flex;align-items:center;justify-content:center}
+        .s{width:36px;height:36px;box-sizing:border-box;border-radius:50%;border:3px solid var(--a);border-right-color:transparent;animation:r .8s linear infinite}
+        @keyframes r{to{transform:rotate(360deg)}}
+        </style><div class="s" role="status" aria-label="Loading"></div>
+        """
+        webView.loadHTMLString(html, baseURL: nil)
     }
 
     func showStatus(_ title: String, detail: String?, retry: Bool = false) {
@@ -165,7 +226,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate,
         stdoutBuffer = ""
         stderrTail = ""
         serverPort = nil
-        showStatus("Starting…", detail: nil)
+        showSplash(accent: savedAppearance().accent)
 
         let p = Process()
         p.executableURL = URL(fileURLWithPath: python)
@@ -250,6 +311,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate,
             item("About Inbox", #selector(NSApplication.orderFrontStandardAboutPanel(_:))),
             item("Check for Updates…", #selector(checkForUpdates)),
             .separator(),
+            item("Settings…", #selector(openSettings), ","),
             item("Sign Out…", #selector(signOut)),
             .separator(),
             item("Hide Inbox", #selector(NSApplication.hide(_:)), "h"),
@@ -294,6 +356,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate,
     @objc func zoomReset() { webView.pageZoom = 1 }
     @objc func zoomIn() { webView.pageZoom = min(webView.pageZoom + 0.1, 2) }
     @objc func zoomOut() { webView.pageZoom = max(webView.pageZoom - 0.1, 0.6) }
+
+    @objc func openSettings() {
+        showMainWindow()
+        callJS("openSettings", [])
+    }
 
     @objc func newMessage() {
         showMainWindow()
@@ -352,8 +419,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate,
         if message.name == "badge", let count = message.body as? String {
             NSApp.dockTile.badgeLabel = (count == "0" || count.isEmpty) ? nil : count
         }
-        if message.name == "update", message.body as? String == "install" {
-            updater.install()
+        if message.name == "update", let command = message.body as? String {
+            if command == "install" { updater.install() }
+            if command == "check" { checkForUpdates() }
+        }
+        if message.name == "appearance", let theme = message.body as? String {
+            applyTheme(theme)
         }
     }
 
