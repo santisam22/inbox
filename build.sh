@@ -1,5 +1,6 @@
 #!/bin/zsh
-# Builds dist/Inbox.app and dist/Inbox.dmg with Python bundled inside.  Usage: ./build.sh
+# Builds dist/Inbox.app and dist/Inbox.dmg with Python bundled inside, plus the signed
+# self-update files (dist/Inbox-update.zip and dist/update.json).  Usage: ./build.sh
 set -euo pipefail
 cd "$(dirname "$0")"
 ROOT=$PWD
@@ -11,6 +12,8 @@ DIST=$ROOT/dist
 CACHE=$ROOT/.cache
 APP=$BUILD/Inbox.app
 RES=$APP/Contents/Resources
+REPO=santisam22/inbox
+VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" macos/Info.plist)
 
 # Standalone CPython (https://github.com/astral-sh/python-build-standalone), pinned by checksum.
 PY_RELEASE=20260929
@@ -26,7 +29,7 @@ mkdir -p "$DIST" "$CACHE" "$APP/Contents/MacOS" "$RES/server/static" "$RES/pytho
 echo "→ Compiling (Apple silicon + Intel)…"
 for arch in arm64 x86_64; do
   swiftc -O -target $arch-apple-macos12.0 -framework Cocoa -framework WebKit \
-    macos/main.swift -o "$BUILD/Inbox-$arch"
+    macos/main.swift macos/Updater.swift -o "$BUILD/Inbox-$arch"
 done
 lipo -create "$BUILD/Inbox-arm64" "$BUILD/Inbox-x86_64" -output "$APP/Contents/MacOS/Inbox"
 
@@ -86,4 +89,18 @@ ln -s /Applications "$STAGE/Applications"
 hdiutil create -volname "Inbox" -srcfolder "$STAGE" -ov -format UDZO -quiet "$DIST/Inbox.dmg"
 ditto "$APP" "$DIST/Inbox.app"
 
-echo "✓ Done: dist/Inbox.dmg ($(du -h "$DIST/Inbox.dmg" | cut -f1))"
+echo "→ Signing update package…"
+ditto -c -k --keepParent "$APP" "$DIST/Inbox-update.zip"
+if SIG=$(swift macos/sign_tool.swift sign "$DIST/Inbox-update.zip"); then
+  NOTES=$(head -1 WHATS_NEW.txt 2>/dev/null || true)
+  python3 - "$VERSION" "https://github.com/$REPO/releases/download/v$VERSION/Inbox-update.zip" "$SIG" "$NOTES" > "$DIST/update.json" <<'PY'
+import json, sys
+version, url, signature, notes = sys.argv[1:]
+print(json.dumps({"version": version, "url": url, "signature": signature, "notes": notes}, indent=2))
+PY
+else
+  echo "  (no signing key in this Keychain: skipped update.json; existing installs won't see this build)"
+  rm -f "$DIST/Inbox-update.zip"
+fi
+
+echo "✓ Done: Inbox $VERSION → dist/Inbox.dmg ($(du -h "$DIST/Inbox.dmg" | cut -f1))"

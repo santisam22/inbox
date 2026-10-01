@@ -8,12 +8,14 @@
 	<key>CFBundleExecutable</key><string>Inbox</string>
 	<key>CFBundleIconFile</key><string>AppIcon</string>
 	<key>CFBundlePackageType</key><string>APPL</string>
-	<key>CFBundleShortVersionString</key><string>1.0</string>
-	<key>CFBundleVersion</key><string>1</string>
+	<key>CFBundleShortVersionString</key><string>1.1</string>
+	<key>CFBundleVersion</key><string>2</string>
 	<key>LSMinimumSystemVersion</key><string>12.0</string>
 	<key>LSApplicationCategoryType</key><string>public.app-category.productivity</string>
 	<key>NSHighResolutionCapable</key><true/>
 	<key>NSHumanReadableCopyright</key><string>A local Gmail-style client for iCloud Mail.</string>
+	<key>InboxUpdateManifestURL</key><string>https://github.com/santisam22/inbox/releases/latest/download/update.json</string>
+	<key>InboxUpdatePublicKey</key><string>35eiTyk47IwWbRKoznotDvHigR3gHPIhKnaEoNM6/VQ=</string>
 	<key>NSAppTransportSecurity</key>
 	<dict><key>NSAllowsLocalNetworking</key><true/></dict>
 </dict>

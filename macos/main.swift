@@ -2,7 +2,8 @@
 //
 // Starts the bundled Python server on 127.0.0.1, shows it in a WKWebView, and
 // adds the Mac niceties: Dock badge, ⌘N, Save dialogs for attachments, links
-// opening in the default browser, and mailto: links opening a new message.
+// opening in the default browser, mailto: links opening a new message, and
+// signed self-updates (Updater.swift).
 
 import Cocoa
 import WebKit
@@ -19,6 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate,
     var stdoutBuffer = ""
     var stderrTail = ""
     var quitting = false
+    let updater = Updater()
 
     // MARK: lifecycle
 
@@ -26,6 +28,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate,
         buildMenu()
         buildWindow()
         startServer()
+
+        updater.onAvailable = { [weak self] info in
+            self?.showUpdateBanner(info)
+            // Test hook: lets an automated test run the whole update flow unattended.
+            if ProcessInfo.processInfo.environment["INBOX_TEST_AUTO_UPDATE"] == "1" { self?.updater.install() }
+        }
+        updater.onStatus = { [weak self] state, message in self?.callJS("updateStatus", [state, message]) }
+        updater.start()
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
@@ -46,6 +56,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate,
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .default()
         config.userContentController.add(self, name: "badge")
+        config.userContentController.add(self, name: "update")
 
         webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = self
@@ -237,6 +248,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate,
 
         _ = submenu("Inbox", [
             item("About Inbox", #selector(NSApplication.orderFrontStandardAboutPanel(_:))),
+            item("Check for Updates…", #selector(checkForUpdates)),
             .separator(),
             item("Sign Out…", #selector(signOut)),
             .separator(),
@@ -293,6 +305,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate,
         webView.evaluateJavaScript("document.querySelector('.account')?.click()")
     }
 
+    @objc func checkForUpdates() {
+        updater.check(userInitiated: true) { [weak self] result in
+            guard let self else { return }
+            let alert = NSAlert()
+            switch result {
+            case .success(nil):
+                alert.messageText = "You're up to date"
+                alert.informativeText = "Inbox \(self.updater.currentVersion) is the newest version."
+            case .success(let info?):
+                alert.messageText = "Inbox \(info.version) is available"
+                alert.informativeText = info.notes ?? ""
+                alert.addButton(withTitle: "Update Now")
+                alert.addButton(withTitle: "Later")
+            case .failure(let error):
+                alert.messageText = "Couldn't check for updates"
+                alert.informativeText = error.localizedDescription
+            }
+            alert.beginSheetModal(for: self.window) { response in
+                if case .success(_?) = result, response == .alertFirstButtonReturn { self.updater.install() }
+            }
+        }
+    }
+
+    func showUpdateBanner(_ info: UpdateInfo) {
+        callJS("updateAvailable", [["version": info.version, "notes": info.notes ?? ""]])
+    }
+
+    /// Calls window.inboxApp.<name>(...args) in the page, with arguments passed as JSON.
+    func callJS(_ name: String, _ args: [Any]) {
+        guard let data = try? JSONSerialization.data(withJSONObject: args),
+              let json = String(data: data, encoding: .utf8) else { return }
+        webView.evaluateJavaScript("window.inboxApp && window.inboxApp.\(name)(...\(json))")
+    }
+
     func compose(to address: String) {
         guard let data = try? JSONSerialization.data(withJSONObject: ["to": address]),
               let json = String(data: data, encoding: .utf8) else { return }
@@ -305,6 +351,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate,
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
         if message.name == "badge", let count = message.body as? String {
             NSApp.dockTile.badgeLabel = (count == "0" || count.isEmpty) ? nil : count
+        }
+        if message.name == "update", message.body as? String == "install" {
+            updater.install()
         }
     }
 
@@ -353,6 +402,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate,
                  for action: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
         if let url = action.request.url { openExternally(url) }
         return nil
+    }
+
+    // Re-show a pending update banner whenever the app page (re)loads.
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        if let url = webView.url, isAppURL(url), let info = updater.available { showUpdateBanner(info) }
     }
 
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {

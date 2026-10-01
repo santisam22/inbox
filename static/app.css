@@ -287,6 +287,20 @@ kbd {
   border: 1px solid var(--border); background: var(--row-read); font: 12px/1.6 ui-monospace, Menlo, monospace;
 }
 
+/* ---------- update banner ---------- */
+.update-banner {
+  display: flex; align-items: center; gap: 12px; flex: none;
+  padding: 8px 8px 8px 16px; background: var(--nav-active); color: var(--text); font-size: 13px;
+}
+.update-banner > .ic { color: var(--accent); }
+.update-banner .text { flex: 1; min-width: 0; }
+.update-banner .text.error { color: var(--danger); }
+.update-btn { height: 32px; padding: 0 16px; border-radius: 16px; background: var(--accent); color: var(--accent-text); font-weight: 600; white-space: nowrap; }
+.update-btn:hover { filter: brightness(1.08); }
+.update-banner .icon-btn { width: 32px; height: 32px; }
+.spinner { width: 18px; height: 18px; flex: none; border-radius: 50%; border: 2px solid var(--accent); border-right-color: transparent; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
 /* ---------- setup ---------- */
 body.needs-setup > :not(.setup) { display: none !important; }
 .setup { position: fixed; inset: 0; overflow-y: auto; display: flex; align-items: center; justify-content: center; padding: 32px 16px; background: var(--bg); }

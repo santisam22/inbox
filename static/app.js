@@ -871,8 +871,46 @@ function showAccountMenu(anchor) {
   }]);
 }
 
-// Hooks for the native Inbox.app wrapper (⌘N, mailto: links).
-window.inboxApp = { compose: (prefill) => state.me && openCompose(prefill || {}) };
+// ------------------------------------------------------------------ update banner
+// Inbox.app calls these when a signed update is available and while installing it.
+let updateDismissed = false;
+
+function renderUpdateBanner(html, { force = false } = {}) {
+  if (updateDismissed && !force) return;
+  let el = $("#updateBanner");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "updateBanner";
+    el.className = "update-banner";
+    el.setAttribute("role", "status");
+    $(".main").prepend(el);
+    el.addEventListener("click", (e) => {
+      const a = e.target.closest("[data-update]")?.dataset.update;
+      if (a === "install") window.webkit?.messageHandlers?.update?.postMessage("install");
+      if (a === "later") { updateDismissed = true; el.remove(); }
+    });
+  }
+  el.innerHTML = html;
+}
+
+function updateAvailable(info) {
+  renderUpdateBanner(`${icon("refresh")}<div class="text"><b>Inbox ${esc(info.version)} is available.</b> ${esc(info.notes || "")}</div>
+    <button class="update-btn" data-update="install">Update now</button>
+    <button class="icon-btn" data-update="later" title="Later">${icon("close")}</button>`);
+}
+
+function updateStatus(stateName, message) {
+  if (stateName === "error") {
+    renderUpdateBanner(`${icon("junk")}<div class="text error">${esc(message)}</div>
+      <button class="update-btn" data-update="install">Try again</button>
+      <button class="icon-btn" data-update="later" title="Close">${icon("close")}</button>`, { force: true });
+  } else {
+    renderUpdateBanner(`<span class="spinner"></span><div class="text">${esc(message)}</div>`, { force: true });
+  }
+}
+
+// Hooks for the native Inbox.app wrapper (⌘N, mailto: links, updates).
+window.inboxApp = { compose: (prefill) => state.me && openCompose(prefill || {}), updateAvailable, updateStatus };
 
 // ------------------------------------------------------------------ boot
 async function boot() {

@@ -1,0 +1,1 @@
+Inbox now updates itself. You also get a notice before connecting about what Inbox shares.
