@@ -122,6 +122,7 @@ DEFAULT_SETTINGS = {
     "categories": DEFAULT_CATEGORIES,
     "unsortedSenders": [],      # senders that stay in All mail only, whatever their keywords
     "photo": "icloud",          # icloud | custom | none: the avatar shown for your account
+    "folderColors": {},         # folder name -> "#rrggbb" (sidebar icon and message badges)
     "toolbar": DEFAULT_TOOLBAR,
 }
 SETTING_CHOICES = {
@@ -241,6 +242,11 @@ def _save_settings(changes):
             value = max(0, min(85, int(value)))
         if key in ("snippets", "remoteImages"):
             value = bool(value)
+        if key == "folderColors":
+            if not isinstance(value, dict) or len(value) > 300 or not all(
+                    isinstance(k, str) and len(k) <= 200 and isinstance(v, str) and re.fullmatch(r"#[0-9a-fA-F]{6}", v)
+                    for k, v in value.items()):
+                raise MailError("Invalid folder colors")
         if key == "unsortedSenders":
             value = clean_senders(value)
         if key == "categories":
@@ -1386,6 +1392,94 @@ class Mail:
             return out
         return self.side.run(op)
 
+    # folders ---------------------------------------------------------------
+    def _own_folder(self, name):
+        """Only folders you made can be renamed or deleted; iCloud's built-in ones can't."""
+        folders = self.folders(max_age=0)
+        if name not in {f["name"] for f in folders}:
+            raise MailError(f"There's no folder named “{name}”")
+        if name.upper() == "INBOX" or name in self.roles.values():
+            raise MailError(f"“{name}” is a built-in iCloud folder, so it can't be renamed or deleted")
+
+    def _new_name(self, name):
+        name = re.sub(r"\s+", " ", str(name)).strip()
+        if not name or len(name) > 100:
+            raise MailError("Give the folder a name (up to 100 characters)")
+        if "/" in name or name.upper() == "INBOX" or name.startswith("."):
+            raise MailError("Folder names can't contain “/” or be named Inbox")
+        if any(f["name"].lower() == name.lower() for f in self.folders(max_age=0)):
+            raise MailError(f"You already have a folder named “{name}”")
+        return name
+
+    def _folders_changed(self):
+        self._folders_at = 0
+        for lane in (self.main, self.side):
+            lane.selected = None
+
+    def create_folder(self, name):
+        name = self._new_name(name)
+
+        def op(c):
+            typ, data = c.create(mbox(name))
+            if typ != "OK":
+                raise MailError(f"iCloud couldn't create the folder: {(data or [b''])[0].decode(errors='replace')}")
+        self.run(op)
+        self._folders_changed()
+        return {"name": name}
+
+    def rename_folder(self, old, new):
+        self._own_folder(old)
+        new = self._new_name(new)
+
+        def op(c):
+            if self.main.selected == old:
+                c.select("INBOX")
+                self.main.selected = "INBOX"
+            typ, data = c.rename(mbox(old), mbox(new))
+            if typ != "OK":
+                raise MailError(f"iCloud couldn't rename the folder: {(data or [b''])[0].decode(errors='replace')}")
+        self.run(op)
+        self._folders_changed()
+        for key in [k for k in self.raw_cache if k[0] == old]:
+            self.raw_cache.pop(key)
+        colors = load_settings()["folderColors"]
+        if old in colors:
+            colors[new] = colors.pop(old)
+            save_settings({"folderColors": colors})
+        return {"name": new}
+
+    def delete_folder(self, name):
+        """Deleting a folder on iCloud deletes its mail too, so move the mail to Trash first."""
+        self._own_folder(name)
+        trash = self.role_folder("trash")
+
+        def op(c):
+            count = self.main.select(c, name, fresh=True) or 0
+            if count:
+                if "MOVE" in c.capabilities:
+                    typ, _ = c.uid("MOVE", "1:*", mbox(trash))
+                else:
+                    typ, _ = c.uid("COPY", "1:*", mbox(trash))
+                    if typ == "OK":
+                        c.store("1:*", "+FLAGS.SILENT", "(\\Deleted)")
+                        c.expunge()
+                if typ != "OK":
+                    raise MailError("Couldn't move the folder's messages to Trash, so the folder was kept")
+            c.select("INBOX")  # a mailbox can't be deleted while it's open
+            self.main.selected = "INBOX"
+            typ, data = c.delete(mbox(name))
+            if typ != "OK":
+                raise MailError(f"iCloud couldn't delete the folder: {(data or [b''])[0].decode(errors='replace')}")
+            return count
+        moved = self.run(op)
+        self._folders_changed()
+        for key in [k for k in self.raw_cache if k[0] == name]:
+            self.raw_cache.pop(key)
+        colors = load_settings()["folderColors"]
+        if colors.pop(name, None):
+            save_settings({"folderColors": colors})
+        return {"moved": moved}
+
     def categories_status(self):
         self.index.refresh_soon()
         return {"indexing": self.index.status(),
@@ -1698,6 +1792,9 @@ def make_handler(app, port):
                 "/api/send": ok(lambda: mail.send(data)),
                 "/api/mark-all-read": lambda: mail.mark_all_read(data["folder"], data.get("category", "")),
                 "/api/empty": lambda: mail.empty_folder(data["folder"]),
+                "/api/folders/create": lambda: mail.create_folder(data.get("name", "")),
+                "/api/folders/rename": lambda: mail.rename_folder(data["name"], data.get("newName", "")),
+                "/api/folders/delete": lambda: mail.delete_folder(data["name"]),
             }
             if path not in routes:
                 return self._json({"error": "Unknown endpoint"}, 404)

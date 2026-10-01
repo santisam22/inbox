@@ -134,6 +134,8 @@ const state = {
   category: "",
   catStatus: { unread: {}, indexing: null },
   listStale: false,   // set when sorting rules change, so a tab is re-fetched instead of re-shown
+  renamingFolder: null,
+  creatingFolder: false,
 };
 const PAGES = { "#settings": "settings", "#categories": "categories" };
 let listToken = 0;
@@ -397,13 +399,30 @@ function renderFolders() {
   const ul = $("#folderList");
   const roleFolders = state.folders.filter((f) => f.role);
   const custom = state.folders.filter((f) => !f.role);
+  const editRow = (attr, value, placeholder) => `<li class="editing"><span class="folder-edit">${icon("folder")}
+    <input class="folder-input" ${attr} value="${esc(value)}" placeholder="${placeholder}" maxlength="100" aria-label="Folder name"></span></li>`;
   const item = (f) => {
+    if (state.renamingFolder === f.name) return editRow(`data-folder-rename="${esc(f.name)}"`, f.name, "Folder name");
     const showCount = f.unread > 0 && !["sent", "trash", "drafts"].includes(f.role);
     return `<li><a href="#f=${enc(f.name)}" class="${f.name === state.folder && !state.query ? "active" : ""}" data-folder="${esc(f.name)}" title="${esc(f.role ? ROLE_LABEL[f.role] : f.name)}">
-      ${icon(folderIcon(f))}<span class="name">${esc(f.role ? ROLE_LABEL[f.role] : f.name)}</span>
-      ${showCount ? `<span class="count">${f.unread.toLocaleString()}</span>` : ""}</a></li>`;
+      ${coloredIcon(folderIcon(f), folderColor(f.name))}<span class="name">${esc(f.role ? ROLE_LABEL[f.role] : f.name)}</span>
+      ${showCount ? `<span class="count">${f.unread.toLocaleString()}</span>` : ""}</a>
+      <button class="folder-more" data-folder-menu="${esc(f.name)}" title="Folder options" aria-label="Options for ${esc(f.role ? ROLE_LABEL[f.role] : f.name)}">${icon("more")}</button></li>`;
   };
-  ul.innerHTML = roleFolders.map(item).join("") + (custom.length ? `<li class="sep"></li>` + custom.map(item).join("") : "");
+  // Keep a half-typed folder name if the list refreshes while you're editing.
+  const editing = $(".folder-input", ul);
+  const typed = editing?.value;
+  if (editing) editing.dataset.done = "1";
+  ul.innerHTML = roleFolders.map(item).join("")
+    + `<li class="folders-head"><span>Folders</span><button class="icon-btn" data-folder-new title="New folder" aria-label="New folder">${icon("add")}</button></li>`
+    + custom.map(item).join("")
+    + (state.creatingFolder ? editRow("data-folder-create", "", "New folder name") : "");
+  const input = $(".folder-input", ul);
+  if (input) {
+    if (typed !== undefined) input.value = typed;
+    input.focus();
+    if (typed === undefined) input.select();
+  }
   const inbox = state.folders.find((f) => f.role === "inbox");
   // The window (or browser tab) is named after the signed-in account; unread mail shows on the Dock badge.
   document.title = state.me?.email || "Inbox";
@@ -474,13 +493,15 @@ function renderList() {
     html += `<div class="empty">${icon(state.query ? "search" : "inbox")}${state.query ? "No messages matched your search." : `No messages in ${where}.`}</div>`;
   } else if (list) {
     const showTo = inRole("sent") || inRole("drafts");
+    const ownFolder = state.folders.find((f) => f.name === state.folder && !f.role);
+    const badge = ownFolder ? folderBadge(ownFolder.name) : "";
     html += list.messages.map((m, i) => {
       const who = showTo ? `To: ${listNames(m.to) || "(no recipients)"}` : addrName(m.from[0]);
       return `<div class="row ${m.seen ? "" : "unread"} ${state.selected.has(m.uid) ? "selected" : ""} ${i === state.cursor ? "cursor" : ""}" data-uid="${m.uid}" data-index="${i}">
         <label class="checkbox"><input type="checkbox" data-action="select" ${state.selected.has(m.uid) ? "checked" : ""}></label>
         <button class="star ${m.flagged ? "on" : ""}" data-action="star" title="${m.flagged ? "Starred" : "Not starred"}">${icon(m.flagged ? "star" : "starOutline")}</button>
         <div class="sender" title="${esc(m.from.map(addrFull).join(", "))}">${esc(who)}</div>
-        <div class="content"><span class="subject">${esc(m.subject || "(no subject)")}</span>${m.snippet ? `<span class="snippet"> — ${esc(m.snippet)}</span>` : ""}</div>
+        <div class="content">${badge}<span class="subject">${esc(m.subject || "(no subject)")}</span>${m.snippet ? `<span class="snippet"> — ${esc(m.snippet)}</span>` : ""}</div>
         ${m.hasAttachments ? `<span class="att" title="Has attachments">${icon("attach")}</span>` : ""}
         <div class="date" title="${esc(fmtFullDate(m.date))}">${esc(fmtListDate(m.date))}</div>
         <div class="hover-actions">
@@ -528,7 +549,7 @@ function renderMessage() {
   const showChip = state.query || !inRole("inbox");
 
   view.innerHTML = `<article class="msg">
-    <h1><span>${esc(m.subject || "(no subject)")}</span>${showChip ? `<span class="folder-chip">${esc(folderLabel(state.folder))}</span>` : ""}</h1>
+    <h1><span>${esc(m.subject || "(no subject)")}</span>${showChip ? (state.folders.some((f) => f.name === state.folder && !f.role) ? folderBadge(state.folder) : `<span class="folder-chip">${esc(folderLabel(state.folder))}</span>`) : ""}</h1>
     <div class="msg-head">
       ${avatar(from, "lg")}
       <div class="who">
@@ -646,21 +667,132 @@ function showMoveMenu(anchor) {
   if (!uids.length) return;
   const dests = state.folders.filter((f) => f.name !== state.folder && f.role !== "drafts");
   showMenu(anchor, "Move to:", dests.map((f) => ({
-    label: f.role ? ROLE_LABEL[f.role] : f.name, icon: folderIcon(f), run: () => moveAction("move", uids, f.name),
+    label: f.role ? ROLE_LABEL[f.role] : f.name, icon: folderIcon(f), color: folderColor(f.name), run: () => moveAction("move", uids, f.name),
   })));
 }
+
+// ------------------------------------------------------------------ folders (sidebar)
+const folderColor = (name) => state.settings.folderColors?.[name] || null;
+const coloredIcon = (name, color) => (color ? icon(name).replace("<svg ", `<svg style="color:${color}" `) : icon(name));
+const FOLDER_BADGE_DEFAULT = "#6b7280";
+
+/** A colored badge with the folder's name, for emails in folders you made. */
+function folderBadge(name) {
+  const color = folderColor(name) || FOLDER_BADGE_DEFAULT;
+  return `<span class="folder-badge" style="background:${color};color:${textOn(color)}">${esc(name)}</span>`;
+}
+
+function showFolderMenu(anchor, name) {
+  const f = state.folders.find((x) => x.name === name);
+  if (!f) return;
+  const own = !f.role;
+  const items = [];
+  if (own) items.push({ label: "Rename", icon: "edit", run: () => { state.creatingFolder = false; state.renamingFolder = name; renderFolders(); } });
+  items.push({ swatches: true, label: "Color", current: folderColor(name), run: (hex) => setFolderColor(name, hex) });
+  items.push({ label: "Mark all as read", icon: "doneAll", run: () => markFolderRead(f) });
+  if (f.role === "trash" || f.role === "junk") items.push({ label: f.role === "junk" ? "Empty Spam" : "Empty Trash", icon: "sweep", run: () => emptyNamedFolder(f) });
+  if (own) items.push({ label: "Delete folder", icon: "trash", danger: true, run: () => deleteFolder(f) });
+  showMenu(anchor, f.role ? ROLE_LABEL[f.role] : f.name, items);
+}
+
+function setFolderColor(name, hex) {
+  const colors = { ...(state.settings.folderColors || {}) };
+  if (hex) colors[name] = hex; else delete colors[name];
+  updateSettings({ folderColors: colors });
+}
+
+async function markFolderRead(f) {
+  try {
+    const r = await api("/api/mark-all-read", { folder: f.name });
+    if (state.folder === f.name) { for (const m of state.list?.messages || []) m.seen = true; render(); }
+    toast(r.marked ? `Marked ${r.marked.toLocaleString()} as read in ${f.role ? ROLE_LABEL[f.role] : f.name}.` : "Everything there is already read.");
+  } catch (e) { toast(e.message); }
+  loadFolders();
+  loadCategoryStatus();
+}
+
+async function emptyNamedFolder(f) {
+  const label = f.role === "junk" ? "Spam" : "Trash";
+  if (!f.total) return toast(`${label} is already empty.`);
+  if (!confirm(`Permanently delete all ${f.total.toLocaleString()} message${f.total === 1 ? "" : "s"} in ${label}? This can't be undone.`)) return;
+  try {
+    const r = await api("/api/empty", { folder: f.name });
+    toast(`Deleted ${r.deleted.toLocaleString()} message${r.deleted === 1 ? "" : "s"} from ${label}.`);
+  } catch (e) { toast(e.message); }
+  if (state.folder === f.name) loadList();
+  loadFolders();
+}
+
+async function deleteFolder(f) {
+  const n = f.total || 0;
+  if (!confirm(`Delete the folder “${f.name}”?${n ? ` Its ${n.toLocaleString()} message${n === 1 ? "" : "s"} will be moved to Trash.` : ""}`)) return;
+  try {
+    const r = await api("/api/folders/delete", { name: f.name });
+    toast(`Deleted “${f.name}”${r.moved ? `. ${r.moved.toLocaleString()} message${r.moved === 1 ? " was" : "s were"} moved to Trash` : ""}.`);
+    state.settings = await api("/api/settings");
+    if (state.folder === f.name) go({ folder: "INBOX", page: 0, query: "", uid: null, category: "" });
+  } catch (e) { toast(e.message); }
+  loadFolders();
+}
+
+async function commitFolderEdit(input) {
+  if (input.dataset.done) return;
+  input.dataset.done = "1";
+  const value = input.value.trim();
+  const old = input.dataset.folderRename;
+  state.renamingFolder = null;
+  state.creatingFolder = false;
+  if (!value || value === old) { renderFolders(); return; }
+  try {
+    if (old) {
+      const r = await api("/api/folders/rename", { name: old, newName: value });
+      state.settings = await api("/api/settings");  // its color moved with it
+      toast(`Renamed “${old}” to “${r.name}”.`);
+      if (state.folder === old) go({ folder: r.name, page: 0, uid: null, category: "" });
+    } else {
+      const r = await api("/api/folders/create", { name: value });
+      toast(`Created the folder “${r.name}”.`);
+    }
+  } catch (e) {
+    toast(e.message);
+  }
+  await loadFolders();
+}
+
+document.addEventListener("keydown", (e) => {
+  if (!e.target.matches?.(".folder-input")) return;
+  if (e.key === "Enter") { e.preventDefault(); commitFolderEdit(e.target); }
+  if (e.key === "Escape") {
+    e.preventDefault();
+    e.target.dataset.done = "1";
+    state.renamingFolder = null;
+    state.creatingFolder = false;
+    renderFolders();
+  }
+});
+document.addEventListener("focusout", (e) => { if (e.target.matches?.(".folder-input")) commitFolderEdit(e.target); });
 
 function showMenu(anchor, title, items) {
   closeMenu();
   const host = $("#menuHost");
   const r = anchor.getBoundingClientRect();
-  host.innerHTML = `<div class="menu" role="menu" style="top:${r.bottom + 4}px;left:${Math.min(r.left, innerWidth - 240)}px">
+  const swatchRow = (it, i) => `<div class="menu-swatches"><span>${esc(it.label)}</span>
+    ${[["No color", ""], ...ACCENTS].map(([name, hex]) => `<button class="swatch ${(it.current || "") === hex ? "on" : ""}" data-i="${i}" data-hex="${hex}" title="${name}" aria-label="${name}"
+      ${hex ? `style="background:${hex}"` : ""}>${hex ? "" : icon("close")}</button>`).join("")}</div>`;
+  host.innerHTML = `<div class="menu" role="menu" style="top:${r.bottom + 4}px;left:${Math.min(r.left, innerWidth - 260)}px">
     ${title ? `<div class="menu-title">${esc(title)}</div>` : ""}
-    ${items.map((it, i) => `<button role="menuitem" data-i="${i}">${icon(it.icon)}${esc(it.label)}</button>`).join("")}</div>`;
+    ${items.map((it, i) => (it.swatches ? swatchRow(it, i)
+      : `<button role="menuitem" class="${it.danger ? "danger" : ""}" data-i="${i}">${coloredIcon(it.icon, it.color)}${esc(it.label)}</button>`)).join("")}</div>`;
   const menu = $(".menu", host);
+  // Open upward when there isn't room below (e.g. folders near the bottom of the sidebar).
+  const box = menu.getBoundingClientRect();
+  if (box.bottom > innerHeight - 8) menu.style.top = `${Math.max(8, r.top - box.height - 4)}px`;
   menu.addEventListener("click", (e) => {
     const b = e.target.closest("button[data-i]");
-    if (b) { closeMenu(); items[+b.dataset.i].run(); }
+    if (!b) return;
+    closeMenu();
+    if (b.dataset.hex !== undefined) items[+b.dataset.i].run(b.dataset.hex);
+    else items[+b.dataset.i].run();
   });
   $("button", menu)?.focus();
   setTimeout(() => document.addEventListener("click", closeMenu, { once: true }));
@@ -859,6 +991,11 @@ document.addEventListener("click", (e) => {
   const actionEl = t.closest("[data-action]");
   const action = actionEl?.dataset.action;
   const row = t.closest(".row");
+
+  const folderMenu = t.closest("[data-folder-menu]");
+  if (folderMenu) { e.preventDefault(); e.stopPropagation(); showFolderMenu(folderMenu, folderMenu.dataset.folderMenu); return; }
+  if (t.closest("[data-folder-new]")) { state.renamingFolder = null; state.creatingFolder = true; renderFolders(); return; }
+  if (t.closest(".folder-input")) return;
 
   if (t.closest("[data-folder]")) {
     e.preventDefault();
@@ -1242,6 +1379,7 @@ async function updateSettings(changes, { rerender = true } = {}) {
   if (rerender && state.view === "settings") renderSettings();
   if (rerender && state.view === "categories") renderCategories();
   if (changes.toolbar || changes.categories) { renderToolbar(); renderTabs(); }
+  if (changes.folderColors) { renderFolders(); if (state.view === "list") renderList(); }
   const resorted = changes.categories || changes.unsortedSenders;
   if (resorted) state.listStale = true;
   try {
