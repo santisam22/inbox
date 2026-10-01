@@ -17,6 +17,7 @@ import html
 import imaplib
 import json
 import os
+import platform
 import quopri
 import re
 import secrets
@@ -27,6 +28,8 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.request
+import uuid
 import webbrowser
 from collections import OrderedDict
 from datetime import datetime
@@ -44,6 +47,8 @@ CONFIG_DIR = os.path.expanduser("~/.icloud-mail")
 CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 STATIC_FILES = {"app.js": "text/javascript", "app.css": "text/css"}
+APP_CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "app_config.json")
+APP_VERSION = "dev"  # replaced by --app-version when run inside Inbox.app
 PAGE_SIZE = 50
 MAX_BODY = 40 * 1024 * 1024  # compose payload limit (attachments are base64 JSON)
 COOKIE_NAME = "icm_session"
@@ -115,6 +120,54 @@ def ssl_context():
     return _ssl_ctx
 
 
+# ---------------------------------------------------------------- user log (Supabase)
+
+def load_app_config():
+    try:
+        with open(APP_CONFIG_FILE) as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
+def supabase_rpc(fn, payload):
+    """Call one of the user-log functions defined in supabase/setup.sql."""
+    ac = load_app_config()
+    url, key = ac.get("supabase_url"), ac.get("supabase_key")
+    if not url or not key:
+        return  # not configured (e.g. a development build)
+    req = urllib.request.Request(
+        f"{url.rstrip('/')}/rest/v1/rpc/{fn}", data=json.dumps(payload).encode(), method="POST",
+        headers={"apikey": key, "Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=15, context=ssl_context()) as r:
+        r.read()
+
+
+def checkin(cfg, force=False):
+    """Record this install in the user log: at sign-in, then at most once a day."""
+    if not cfg.get("email") or (not force and time.time() - cfg.get("last_checkin", 0) < 86400):
+        return
+
+    def run():
+        try:
+            supabase_rpc("inbox_checkin", {
+                "p_install_id": cfg["install_id"], "p_email": cfg["email"],
+                "p_app_version": APP_VERSION, "p_macos_version": platform.mac_ver()[0],
+            })
+            cfg["last_checkin"] = time.time()
+            save_config(cfg)
+        except Exception as e:
+            print(f"warning: user log check-in failed: {e}", file=sys.stderr)
+    threading.Thread(target=run, daemon=True).start()
+
+
+def checkin_daily(cfg):
+    while True:
+        checkin(cfg)
+        time.sleep(6 * 3600)
+
+
 EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$")
 
 
@@ -150,6 +203,7 @@ def sign_in(app, data):
     cfg.update(email=addr, name=name)
     save_config(cfg)
     app["mail"] = Mail(cfg, password)
+    checkin(cfg, force=True)
 
 
 def sign_out(app):
@@ -159,7 +213,12 @@ def sign_out(app):
             app["mail"]._drop()
     if cfg.get("email"):
         keychain_delete(cfg["email"])
+    try:
+        supabase_rpc("inbox_forget", {"p_install_id": cfg["install_id"]})
+    except Exception as e:
+        print(f"warning: couldn't remove this install from the user log: {e}", file=sys.stderr)
     cfg.pop("email", None)
+    cfg.pop("last_checkin", None)
     save_config(cfg)
     app["mail"] = None
 
@@ -938,11 +997,15 @@ def main():
     ap.add_argument("--app", action="store_true", help="run inside Inbox.app (print URL, no browser)")
     ap.add_argument("--port", type=int, help="port to listen on (default 8025)")
     ap.add_argument("--parent-pid", type=int, help="exit when this process exits")
+    ap.add_argument("--app-version", help="Inbox.app version, for the user log")
     args = ap.parse_args()
+    global APP_VERSION
+    APP_VERSION = args.app_version or APP_VERSION
 
     cfg = load_config()
-    if not cfg.get("secret"):
-        cfg["secret"] = secrets.token_urlsafe(32)
+    if not cfg.get("secret") or not cfg.get("install_id"):
+        cfg.setdefault("secret", secrets.token_urlsafe(32))
+        cfg.setdefault("install_id", str(uuid.uuid4()))
         save_config(cfg)
     app = {"cfg": cfg, "mail": None}
     if cfg.get("email"):
@@ -958,6 +1021,7 @@ def main():
     httpd.RequestHandlerClass = make_handler(app, port)
     url = f"http://127.0.0.1:{port}/?key={cfg['secret']}"
 
+    threading.Thread(target=checkin_daily, args=(cfg,), daemon=True).start()
     if args.parent_pid:
         threading.Thread(target=watch_parent, args=(args.parent_pid,), daemon=True).start()
     if args.app:

@@ -826,6 +826,7 @@ function renderSetup() {
       <li><div><b>Paste it here</b>
         <input id="s-pass" class="setup-input" autocomplete="off" spellcheck="false" placeholder="xxxx-xxxx-xxxx-xxxx"></div></li>
     </ol>
+    <p class="share-note">When you connect, Inbox shares your <b>email address</b>, Inbox version and macOS version with Inbox's developer, who keeps a list of users. Your password and your emails are never shared. Signing out removes you from the list.</p>
     <div class="err hidden" role="alert"></div>
     <button type="submit" class="send-btn">Connect</button>
   </form>`;

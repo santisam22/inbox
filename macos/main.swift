@@ -161,7 +161,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate,
         // -B: never write .pyc files into the (signed) app bundle.
         // -I: isolated mode for the bundled Python, so the user's PYTHON* settings can't interfere.
         p.arguments = (bundled != nil ? ["-I"] : []) + ["-B", "-u", script, "--app", "--port", String(preferredPort),
-                       "--parent-pid", String(getpid())]
+                       "--parent-pid", String(getpid()),
+                       "--app-version", Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"]
         let out = Pipe(), err = Pipe()
         p.standardOutput = out
         p.standardError = err

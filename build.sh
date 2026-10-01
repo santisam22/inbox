@@ -68,6 +68,7 @@ iconutil -c icns "$ICONSET" -o "$RES/AppIcon.icns"
 echo "→ Assembling and signing app…"
 cp macos/Info.plist "$APP/Contents/Info.plist"
 cp server.py "$RES/server/"
+[[ -f app_config.json ]] && cp app_config.json "$RES/server/"
 cp static/index.html static/app.js static/app.css "$RES/server/static/"
 # Sign every bundled binary first (inside-out), then the app itself.
 find "$RES/python" -type f \( -name "*.so" -o -name "*.dylib" -o -perm -u+x \) -print0 \
