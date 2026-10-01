@@ -437,6 +437,12 @@ body.no-snippets .row .snippet { display: none; }
 .kw button:hover { background: var(--nav-hover); color: var(--text); }
 .kw .ic { width: 14px; height: 14px; }
 .kw-input { flex: 1; min-width: 160px; border: 0; outline: 0; background: transparent; padding: 4px 6px; font-size: 13px; }
+.rule-label { font-size: 12px; font-weight: 600; color: var(--muted); margin: 12px 0 0 50px; }
+.rule-label span { font-weight: 400; }
+.rule-label + .kws { margin-top: 6px; }
+.kw.sender { background: var(--row-read); border: 1px solid var(--border); }
+.cat.unsorted { background: var(--row-read); }
+.cat.unsorted .kws { margin-left: 50px; }
 .cat-actions { display: flex; gap: 10px; margin-top: 16px; }
 .cat-actions .pill .ic { width: 18px; height: 18px; }
 
@@ -490,7 +496,7 @@ button.account { cursor: pointer; border: 0; padding: 0; }
 /* ---------- small screens ---------- */
 @media (max-width: 860px) {
   .tab { min-width: 0; padding: 0 12px; }
-  .kws, .cat-hint { margin-left: 0; }
+  .kws, .cat-hint, .rule-label, .cat.unsorted .kws { margin-left: 0; }
   .cat-name { width: 140px; }
   .brand span:last-child { display: none; }
   .brand { width: auto; }

@@ -98,7 +98,7 @@ DEFAULT_CATEGORIES = [
         "meeting", "project", "deadline", "standup", "agenda", "interview", "offer letter", "client",
         "proposal", "slack", "jira", "asana", "zoom", "calendar", "invitation", "schedule", "shift",
         "payroll", "onboarding", "timesheet", "linkedin", "recruiter"]},
-    {"id": "person", "name": "Personal", "enabled": True, "people": True, "keywords": []},
+    {"id": "person", "name": "Personal", "enabled": True, "people": True, "keywords": [], "senders": []},
     {"id": "ads", "name": "Ads", "enabled": True, "keywords": [
         "sale", "% off", "discount", "deal", "deals", "promo", "promotion", "coupon", "sponsored",
         "shop now", "limited time", "free shipping", "clearance", "exclusive", "new arrivals",
@@ -118,6 +118,7 @@ DEFAULT_SETTINGS = {
     "snippets": True,
     "remoteImages": False,
     "categories": DEFAULT_CATEGORIES,
+    "unsortedSenders": [],      # senders that stay in All mail only, whatever their keywords
     "toolbar": DEFAULT_TOOLBAR,
 }
 SETTING_CHOICES = {
@@ -168,10 +169,38 @@ def clean_categories(value):
             w = re.sub(r"\s+", " ", str(w)).strip().lower()[:40]
             if w and w not in words and not re.search(r"[\x00-\x1f]", w):
                 words.append(w)
-        item = {"id": cid, "name": name, "enabled": bool(c.get("enabled", True)), "keywords": words}
+        item = {"id": cid, "name": name, "enabled": bool(c.get("enabled", True)), "keywords": words,
+                "senders": clean_senders(c.get("senders", []))}
         if cid == "person":
             item["people"] = True
         out.append(item)
+    return out
+
+
+def normalize_sender(value):
+    """'Name <a@b.com>' / 'a@b.com' -> 'a@b.com'; 'b.com' / '@b.com' -> '@b.com'; else None."""
+    v = str(value).strip().lower()
+    if m := re.search(r"<([^<>]+)>", v):
+        v = m.group(1)
+    v = re.sub(r"\s+", "", v)
+    if re.fullmatch(r"[^@\s<>\"']+@[a-z0-9.-]+\.[a-z]{2,}", v):
+        return v
+    v = v.lstrip("@")
+    if re.fullmatch(r"(?:[a-z0-9-]+\.)+[a-z]{2,}", v):
+        return "@" + v
+    return None
+
+
+def clean_senders(value):
+    if not isinstance(value, list) or len(value) > 500:
+        raise MailError("Invalid sender list")
+    out = []
+    for raw in value:
+        sender = normalize_sender(raw)
+        if not sender:
+            raise MailError(f"“{str(raw)[:60]}” isn't an email address or domain")
+        if sender not in out:
+            out.append(sender)
     return out
 
 
@@ -208,6 +237,8 @@ def _save_settings(changes):
             value = max(0, min(85, int(value)))
         if key in ("snippets", "remoteImages"):
             value = bool(value)
+        if key == "unsortedSenders":
+            value = clean_senders(value)
         if key == "categories":
             value = DEFAULT_CATEGORIES if value == "default" else clean_categories(value)
         if key == "toolbar":
@@ -318,6 +349,37 @@ def is_automated(address):
     return bool(AUTOMATED_SENDER.search(address.split("@", 1)[0])) if address else True
 
 
+def sort_rules():
+    settings = load_settings()
+    return settings["categories"], settings["unsortedSenders"]
+
+
+class SenderRules:
+    """Senders pinned to a tab (or to All mail only). They win over keywords: exact
+    addresses first, then domains, most specific first (b.com also covers mail.b.com)."""
+
+    def __init__(self, categories, unsorted):
+        self.exact, self.domains = {}, []
+        targets = [(c["id"], c.get("senders", [])) for c in categories if c.get("enabled")] + [(None, unsorted)]
+        for target, senders in targets:
+            for sender in senders:
+                if sender.startswith("@"):
+                    self.domains.append((sender[1:], target))
+                else:
+                    self.exact.setdefault(sender, target)
+        self.domains.sort(key=lambda d: -len(d[0]))
+
+    def lookup(self, address):
+        """(True, tab id or None for All mail only) when a rule applies, else (False, None)."""
+        if address in self.exact:
+            return True, self.exact[address]
+        domain = address.rpartition("@")[2]
+        for d, target in self.domains:
+            if domain == d or domain.endswith("." + d):
+                return True, target
+        return False, None
+
+
 class CategoryIndex:
     """Sender and subject of every Inbox message, kept on this Mac (0600) so tabs can be
     sorted locally: iCloud's own search can't express these rules reliably. Built once,
@@ -399,17 +461,23 @@ class CategoryIndex:
         self.complete = True
         self.save()
 
-    def assignments(self, categories):
-        """uid -> category id (or None) for the current rules; memoized."""
+    def assignments(self, categories, unsorted=()):
+        """uid -> category id for the current rules, applied to every message (old and new); memoized."""
         rules = [(c["id"], KeywordMatcher(c["keywords"]), c.get("people", False))
                  for c in categories if c.get("enabled")]
+        senders = SenderRules(categories, unsorted)
         with self.lock:
-            key = (json.dumps(categories, sort_keys=True), len(self.entries), max(self.entries, default=0))
+            key = (json.dumps([categories, list(unsorted)], sort_keys=True), len(self.entries), max(self.entries, default=0))
             if self._memo[0] == key:
                 return self._memo[1]
             items = list(self.entries.items())
         result = {}
         for uid, (sender, address, subject) in items:
+            pinned, target = senders.lookup(address)
+            if pinned:
+                if target:
+                    result[uid] = target
+                continue
             text = f"{sender} {subject}"
             tokens = set(WORD_RE.findall(text))
             automated = None
@@ -423,11 +491,11 @@ class CategoryIndex:
             self._memo = (key, result)
         return result
 
-    def uids_in(self, category, categories):
-        return sorted((u for u, c in self.assignments(categories).items() if c == category), reverse=True)
+    def uids_in(self, category, categories, unsorted=()):
+        return sorted((u for u, c in self.assignments(categories, unsorted).items() if c == category), reverse=True)
 
-    def unread_counts(self, categories):
-        assigned = self.assignments(categories)
+    def unread_counts(self, categories, unsorted=()):
+        assigned = self.assignments(categories, unsorted)
         counts = {}
         with self.lock:
             unseen = set(self.unseen)
@@ -1027,7 +1095,7 @@ class Mail:
 
         def category_page(c):
             self.index.refresh_soon()
-            uids = self.index.uids_in(category, load_settings()["categories"])
+            uids = self.index.uids_in(category, *sort_rules())
             chunk = uids[page * PAGE_SIZE:(page + 1) * PAGE_SIZE]
             if chunk:
                 self._select(c, folder)
@@ -1232,7 +1300,7 @@ class Mail:
     def categories_status(self):
         self.index.refresh_soon()
         return {"indexing": self.index.status(),
-                "unread": self.index.unread_counts(load_settings()["categories"])}
+                "unread": self.index.unread_counts(*sort_rules())}
 
     def mark_all_read(self, folder, category=""):
         def op(c):
@@ -1240,7 +1308,7 @@ class Mail:
             if category and folder == "INBOX":
                 with self.index.lock:
                     unseen = set(self.index.unseen)
-                uids = [u for u in self.index.uids_in(category, load_settings()["categories"]) if u in unseen]
+                uids = [u for u in self.index.uids_in(category, *sort_rules()) if u in unseen]
             else:
                 _, d = c.uid("SEARCH", "UNSEEN")
                 uids = [int(x) for x in (d[0] or b"").split()]

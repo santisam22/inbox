@@ -133,6 +133,7 @@ const state = {
   listFromCache: false,
   category: "",
   catStatus: { unread: {}, indexing: null },
+  listStale: false,   // set when sorting rules change, so a tab is re-fetched instead of re-shown
 };
 const PAGES = { "#settings": "settings", "#categories": "categories" };
 let listToken = 0;
@@ -173,7 +174,7 @@ async function route() {
   const h = readHash();
   if (h.category && !enabledCategories().some((c) => c.id === h.category)) h.category = "";
   const listChanged = h.folder !== state.folder || h.page !== state.page || h.query !== state.query
-    || h.category !== state.category || !state.list;
+    || h.category !== state.category || !state.list || state.listStale;
   if (h.folder !== state.folder || h.query !== state.query || h.category !== state.category) { state.selected.clear(); state.cursor = 0; }
   Object.assign(state, { folder: h.folder, page: h.page, query: h.query, category: h.category });
   $("#searchInput").value = h.query;
@@ -204,6 +205,7 @@ async function loadFolders() {
 
 async function loadList({ quiet = false } = {}) {
   const token = ++listToken;
+  state.listStale = false;
   if (!quiet) { state.loading = true; if (state.view === "list") render(); }
   try {
     const category = inCategoryTabs() ? state.category : "";
@@ -432,6 +434,7 @@ function renderToolbar() {
     tb.innerHTML = `${btn("back", "back", `Back to ${esc(folderLabel(state.folder))} (u)`)}
       <span class="divider"></span>${destructive()}
       <span class="divider"></span>${btn("unread", "mail", "Mark as unread (Shift+U)")}${btn("moveMenu", "move", "Move to")}
+      ${(state.settings.categories || []).some((c) => c.enabled) ? btn("senderMenu", "label", "Move sender to tab") : ""}
       <span class="spacer"></span><span class="range">${pos}</span>
       ${btn("newer", "left", "Newer (k)", idx > 0 ? "" : "disabled")}${btn("older", "right", "Older (j)", idx >= 0 && idx < msgs.length - 1 ? "" : "disabled")}`;
     return;
@@ -891,6 +894,7 @@ document.addEventListener("click", (e) => {
     case "refresh": loadFolders(); loadList(); loadCategoryStatus(); break;
     case "selectMenu": e.stopPropagation(); showSelectMenu(actionEl); break;
     case "moreMenu": e.stopPropagation(); showMoreMenu(actionEl); break;
+    case "senderMenu": e.stopPropagation(); showSenderMenu(actionEl); break;
     case "prevPage": go({ page: state.page - 1, uid: null }); break;
     case "nextPage": go({ page: state.page + 1, uid: null }); break;
     case "back": go({ uid: null }); break;
@@ -1173,8 +1177,11 @@ async function updateSettings(changes, { rerender = true } = {}) {
   if (rerender && state.view === "settings") renderSettings();
   if (rerender && state.view === "categories") renderCategories();
   if (changes.toolbar || changes.categories) { renderToolbar(); renderTabs(); }
+  const resorted = changes.categories || changes.unsortedSenders;
+  if (resorted) state.listStale = true;
   try {
     await api("/api/settings", changes);
+    if (resorted && state.view === "list" && state.category) loadList({ quiet: true });
   } catch (e) {
     // Rejected: go back to what's actually saved.
     toast(e.message);
@@ -1302,6 +1309,7 @@ document.addEventListener("change", async (e) => {
 // ------------------------------------------------------------------ categories page
 function renderCategories() {
   const cats = state.settings.categories || [];
+  const senderChip = (x, j, attr) => `<span class="kw sender" title="${x.startsWith("@") ? `Anyone at ${esc(x.slice(1))}` : esc(x)}">${esc(x.startsWith("@") ? x.slice(1) : x)}<button ${attr}="${j}" aria-label="Remove ${esc(x)}">${icon("close")}</button></span>`;
   const chip = (w, i) => `<span class="kw">${esc(w)}<button data-kw-remove="${i}" title="Remove ${esc(w)}" aria-label="Remove ${esc(w)}">${icon("close")}</button></span>`;
   $("#view").innerHTML = `<div class="settings categories-page">
     <p class="section-note">Inbox sorts your mail into tabs using <b>keywords in the sender or subject</b>. A message goes in the first tab it matches, top to bottom, and is always in All mail. Keywords match whole words, so “sale” won't match “wholesale”.</p>
@@ -1321,8 +1329,16 @@ function renderCategories() {
         <label class="switch" title="${c.enabled ? "Shown" : "Hidden"}"><input type="checkbox" data-cat-toggle ${c.enabled ? "checked" : ""} aria-label="Show ${esc(c.name)} tab"><span></span></label>
       </div>
       ${c.people ? `<p class="cat-hint">Also includes anyone who isn't an automated sender (no-reply addresses, newsletters and the like).</p>` : ""}
+      <div class="rule-label">Keywords</div>
       <div class="kws">${c.keywords.map(chip).join("")}<input class="kw-input" data-kw-add placeholder="${c.keywords.length ? "Add keyword…" : "Add keywords, separated by commas…"}" aria-label="Add keyword to ${esc(c.name)}"></div>
+      <div class="rule-label">Senders <span>always go here, whatever the keywords</span></div>
+      <div class="kws senders">${(c.senders || []).map((x, j) => senderChip(x, j, "data-sender-remove")).join("")}<input class="kw-input" data-sender-add placeholder="name@example.com or example.com" aria-label="Add sender to ${esc(c.name)}"></div>
     </div>`).join("")}
+    <div class="cat unsorted">
+      <div class="cat-head"><span class="cat-icon">${icon("inbox")}</span><b class="cat-title">All mail only</b>
+        <span class="cat-note">Senders here are never sorted into a tab.</span></div>
+      <div class="kws senders">${(state.settings.unsortedSenders || []).map((x, j) => senderChip(x, j, "data-unsorted-remove")).join("")}<input class="kw-input" data-unsorted-add placeholder="name@example.com or example.com" aria-label="Add sender to All mail only"></div>
+    </div>
     <div class="cat-actions">
       <button class="pill" data-cat-new>${icon("add")}Add tab</button>
       <button class="pill" data-cat-reset>Restore defaults</button>
@@ -1346,7 +1362,49 @@ async function saveCategories(cats) {
     loadCategoryStatus();
   });
 }
-const catCopy = () => (state.settings.categories || []).map((c) => ({ ...c, keywords: [...c.keywords] }));
+const catCopy = () => (state.settings.categories || []).map((c) => ({ ...c, keywords: [...c.keywords], senders: [...(c.senders || [])] }));
+
+/** Same rules as the server: "Name <a@b.com>" -> a@b.com, "b.com" -> @b.com. */
+function normalizeSender(value) {
+  let v = String(value).trim().toLowerCase();
+  const m = v.match(/<([^<>]+)>/);
+  if (m) v = m[1];
+  v = v.replace(/\s+/g, "");
+  if (v.includes("@") && !v.startsWith("@")) return v;
+  return v ? "@" + v.replace(/^@+/, "") : "";
+}
+
+/** Pin a sender to a tab ("unsorted" = All mail only, null = back to keywords). Applies to all past mail too. */
+function assignSender(address, target) {
+  const cats = catCopy().map((c) => ({ ...c, senders: c.senders.filter((x) => x !== address) }));
+  const unsorted = (state.settings.unsortedSenders || []).filter((x) => x !== address);
+  if (target === "unsorted") unsorted.push(address);
+  else if (target) cats.find((c) => c.id === target)?.senders.push(address);
+  updateSettings({ categories: cats, unsortedSenders: unsorted }).then(() => loadCategoryStatus());
+  const where = target === "unsorted" ? "All mail only" : target ? categoryName(target) : "sorted by keywords";
+  toast(`Mail from ${address.replace(/^@/, "anyone at ")} — old and new — is now ${target && target !== "unsorted" ? "in " : ""}${where}.`);
+}
+
+function senderRuleFor(address) {
+  const cats = state.settings.categories || [];
+  const exact = cats.find((c) => (c.senders || []).includes(address));
+  if (exact) return exact.id;
+  if ((state.settings.unsortedSenders || []).includes(address)) return "unsorted";
+  return null;
+}
+
+function showSenderMenu(anchor) {
+  const address = state.message?.from?.[0]?.email?.toLowerCase();
+  if (!address) return;
+  const current = senderRuleFor(address);
+  const mark = (on) => (on ? " ✓" : "");
+  showMenu(anchor, `Always put mail from ${address} in:`, [
+    ...enabledCategories().map((c) => ({ label: c.name + mark(current === c.id), icon: CATEGORY_ICONS[c.id] || "label", run: () => assignSender(address, c.id) })),
+    { label: "All mail only (don't sort)" + mark(current === "unsorted"), icon: "inbox", run: () => assignSender(address, "unsorted") },
+    ...(current ? [{ label: "Remove rule (sort by keywords)", icon: "close", run: () => assignSender(address, null) }] : []),
+    { label: "Edit categories…", icon: "settings", run: () => openPage("#categories") },
+  ]);
+}
 const catIndex = (el) => +el.closest("[data-cat]").dataset.cat;
 
 document.addEventListener("click", (e) => {
@@ -1365,6 +1423,14 @@ document.addEventListener("click", (e) => {
   } else if (t.closest("[data-cat-delete]")) {
     const i = catIndex(t);
     if (confirm(`Delete the “${cats[i].name}” tab? Its messages stay in All mail.`)) { cats.splice(i, 1); saveCategories(cats); }
+  } else if (t.closest("[data-sender-remove]")) {
+    const i = catIndex(t);
+    cats[i].senders.splice(+t.closest("[data-sender-remove]").dataset.senderRemove, 1);
+    saveCategories(cats);
+  } else if (t.closest("[data-unsorted-remove]")) {
+    const unsorted = [...(state.settings.unsortedSenders || [])];
+    unsorted.splice(+t.closest("[data-unsorted-remove]").dataset.unsortedRemove, 1);
+    updateSettings({ unsortedSenders: unsorted });
   } else if (t.closest("[data-kw-remove]")) {
     const i = catIndex(t);
     cats[i].keywords.splice(+t.closest("[data-kw-remove]").dataset.kwRemove, 1);
@@ -1379,6 +1445,25 @@ document.addEventListener("change", (e) => {
   const t = e.target, cats = catCopy();
   if (t.matches("[data-cat-toggle]")) { cats[catIndex(t)].enabled = t.checked; saveCategories(cats); }
   if (t.matches("[data-cat-name]")) { cats[catIndex(t)].name = t.value.trim() || "Untitled"; saveCategories(cats); }
+});
+
+document.addEventListener("keydown", (e) => {
+  if (state.view !== "categories" || !e.target.matches("[data-sender-add], [data-unsorted-add]")) return;
+  if (e.key !== "Enter" && e.key !== ",") return;
+  e.preventDefault();
+  const raw = e.target.value.split(/[,;\n]+/).map((x) => x.trim()).filter(Boolean);
+  const bad = raw.find((x) => !/^(?:[^@\s<>"']+@[a-z0-9.-]+\.[a-z]{2,}|@(?:[a-z0-9-]+\.)+[a-z]{2,})$/.test(normalizeSender(x)));
+  if (bad) return toast(`“${bad}” isn't an email address (name@example.com) or a domain (example.com).`);
+  const senders = raw.map(normalizeSender);
+  if (!senders.length) return;
+  // A sender belongs to one place: adding it here removes it from any other tab.
+  const toUnsorted = e.target.matches("[data-unsorted-add]");
+  const i = toUnsorted ? -1 : catIndex(e.target);
+  const cats = catCopy().map((c) => ({ ...c, senders: c.senders.filter((x) => !senders.includes(x)) }));
+  let unsorted = (state.settings.unsortedSenders || []).filter((x) => !senders.includes(x));
+  if (toUnsorted) unsorted = [...unsorted, ...senders]; else cats[i].senders.push(...senders);
+  updateSettings({ categories: cats, unsortedSenders: unsorted }).then(() => loadCategoryStatus());
+  setTimeout(() => (toUnsorted ? $("[data-unsorted-add]") : $$("[data-sender-add]")[i])?.focus(), 30);
 });
 
 document.addEventListener("keydown", (e) => {
