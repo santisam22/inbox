@@ -1,1 +1,1 @@
-Pin senders to a tab (or keep them out of tabs), and changing tab rules now re-sorts all your existing mail.
+Your iCloud profile photo now shows as your avatar. Plus: pin senders to a tab, and tab rule changes re-sort all your existing mail.

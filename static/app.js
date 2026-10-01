@@ -1062,6 +1062,32 @@ function renderSetup() {
   mail.focus();
 }
 
+/** Your avatar: the iCloud (or custom) profile photo, or your initial. */
+function accountAvatar(cls = "") {
+  const me = state.me || {};
+  if (me.photo) return `<span class="avatar ${cls} has-photo"><img src="${esc(me.photo)}" alt=""></span>`;
+  return avatar({ name: me.name, email: me.email }, cls);
+}
+
+function renderAccountButton() {
+  const me = state.me;
+  const html = accountAvatar("account").replace("<span", '<button type="button" id="account"').replace(/<\/span>$/, "</button>");
+  ($("#account") || $(".account")).outerHTML = html;
+  const btn = $("#account");
+  btn.title = `${me.name ? me.name + "\n" : ""}${me.email}`;
+  btn.addEventListener("click", (e) => { e.stopPropagation(); showAccountMenu(btn); });
+}
+
+async function refreshMe() {
+  try {
+    const me = await api("/api/me");
+    if (me.setupRequired) return;
+    state.me = me;
+    renderAccountButton();
+    if (state.view === "settings") renderSettings();
+  } catch { /* keep what we have */ }
+}
+
 function showAccountMenu(anchor) {
   showMenu(anchor, state.me.email, [{
     label: "Sign out", icon: "close",
@@ -1241,8 +1267,15 @@ function renderSettings() {
     <div class="setting"><div class="label"><b>Load remote images automatically</b><span>Off blocks tracking pixels. You can still show images in any message.</span></div>${toggle("remoteImages")}</div>
 
     <h2>Account</h2>
-    <div class="setting"><div class="label"><b>${esc(state.me?.email || "")}</b><span>Signed in with an app-specific password.</span></div>
+    <div class="setting">${accountAvatar("lg")}<div class="label"><b>${esc(state.me?.email || "")}</b><span>Signed in with an app-specific password.</span></div>
       <button class="pill danger" data-settings-action="signout">Sign out</button></div>
+    <div class="setting"><div class="label"><b>Profile photo</b><span>${
+      s.photo === "icloud" ? (state.me?.hasICloudPhoto ? "Your iCloud profile photo, updated each time Inbox opens."
+        : "No iCloud photo found. This Mac needs to be signed in to the same Apple Account, with a photo set.")
+      : s.photo === "custom" ? "A photo you chose." : "Your initial."}</span></div>
+      ${seg("photo", [["icloud", "iCloud"], ["custom", "Custom"], ["none", "Initial"]])}</div>
+    ${s.photo === "custom" ? `<div class="setting"><div class="label"><b>${state.me?.hasCustomPhoto ? "Change photo" : "Choose a photo"}</b><span>JPEG, PNG, WebP or GIF, up to 10 MB.</span></div>
+      <label class="pill">Choose photo…<input type="file" accept="image/jpeg,image/png,image/webp,image/gif" data-photo-upload hidden></label></div>` : ""}
     <div class="setting"><div class="label"><b>Inbox ${esc(state.me?.version || "")}</b><span>Updates install automatically when you click Update now.</span></div>
       ${native ? `<button class="pill" data-settings-action="checkUpdates">Check for updates</button>` : ""}</div>
   </div>`;
@@ -1253,7 +1286,7 @@ document.addEventListener("click", (e) => {
   const set = e.target.closest("[data-set]");
   if (set) {
     if (set.dataset.set === "background" && set.dataset.value === "image") return;
-    updateSettings({ [set.dataset.set]: set.dataset.value });
+    updateSettings({ [set.dataset.set]: set.dataset.value }).then(() => { if (set.dataset.set === "photo") refreshMe(); });
     return;
   }
   const move = e.target.closest("[data-tool-move]");
@@ -1291,6 +1324,19 @@ document.addEventListener("change", async (e) => {
   }
   if (t.matches("[data-dim]")) updateSettings({ backgroundDim: +t.value }, { rerender: false });
   if (t.matches("[data-color]")) updateSettings({ accent: t.value });
+  if (t.matches("[data-photo-upload]") && t.files[0]) {
+    const file = t.files[0];
+    if (file.size > 10 * 1024 * 1024) return toast("Choose a photo smaller than 10 MB.");
+    try {
+      const dataUrl = await new Promise((ok, fail) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = fail; r.readAsDataURL(file); });
+      state.me = await api("/api/photo", { data: dataUrl.split(",")[1] });
+      state.settings.photo = "custom";
+      renderAccountButton();
+      renderSettings();
+    } catch (err) {
+      toast(err.message);
+    }
+  }
   if (t.matches("[data-bg-upload]") && t.files[0]) {
     const file = t.files[0];
     if (file.size > 20 * 1024 * 1024) return toast("Choose an image smaller than 20 MB.");
@@ -1533,11 +1579,9 @@ async function boot() {
     if (me.setupRequired) { document.body.classList.add("needs-setup"); renderSetup(); finishBoot(); return; }
     state.me = me;
     document.title = me.email;
-    const acct = $("#account");
-    acct.outerHTML = avatar({ name: me.name, email: me.email }, "account").replace("<span", '<button type="button"').replace(/<\/span>$/, "</button>");
-    const btn = $(".account");
-    btn.title = `${me.name ? me.name + "\n" : ""}${me.email}`;
-    btn.addEventListener("click", (e) => { e.stopPropagation(); showAccountMenu(btn); });
+    renderAccountButton();
+    // The iCloud photo is copied in the background at launch; pick it up if it wasn't ready yet.
+    if (me.photoChoice === "icloud" && !me.photo) setTimeout(refreshMe, 3000);
   } catch (e) {
     $("#view").innerHTML = `<div class="error-box">${esc(e.message)}</div>`;
     finishBoot();

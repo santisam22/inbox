@@ -17,6 +17,8 @@ import html
 import imaplib
 import json
 import os
+import plistlib
+import pwd
 import platform
 import quopri
 import re
@@ -119,9 +121,11 @@ DEFAULT_SETTINGS = {
     "remoteImages": False,
     "categories": DEFAULT_CATEGORIES,
     "unsortedSenders": [],      # senders that stay in All mail only, whatever their keywords
+    "photo": "icloud",          # icloud | custom | none: the avatar shown for your account
     "toolbar": DEFAULT_TOOLBAR,
 }
 SETTING_CHOICES = {
+    "photo": {"icloud", "custom", "none"},
     "theme": {"system", "light", "dark"},
     "background": {"none", "aurora", "sunset", "ocean", "forest", "sand", "graphite", "image"},
     "density": {"comfortable", "compact"},
@@ -257,6 +261,85 @@ def image_type(data):
     if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
         return "image/webp"
     return None
+
+
+# ---------------------------------------------------------------- profile photo
+
+PHOTO_ICLOUD = os.path.join(CONFIG_DIR, "photo-icloud.jpg")
+PHOTO_CUSTOM = os.path.join(CONFIG_DIR, "photo-custom")
+
+
+def mac_icloud_addresses():
+    """Addresses of the Apple Account this Mac is signed in to (used only for comparison)."""
+    out = set()
+    try:
+        with open(os.path.expanduser("~/Library/Preferences/MobileMeAccounts.plist"), "rb") as f:
+            accounts = plistlib.load(f).get("Accounts", [])
+        for acct in accounts:
+            if "@" in acct.get("AccountID", ""):
+                out.add(acct["AccountID"].lower())
+            for svc in acct.get("Services", []):
+                if svc.get("Name") == "MAIL_AND_NOTES" and svc.get("EmailAddress"):
+                    out.add(svc["EmailAddress"].lower())
+    except Exception:
+        pass
+    return out
+
+
+def sync_icloud_photo(email_addr):
+    """Copy this Mac's account picture, which on a Mac signed in to iCloud is the Apple
+    Account profile photo, as a small JPEG. Only when the Mac's Apple Account is the same
+    account Inbox is signed in to, so a shared Mac never shows someone else's photo.
+    Runs at every launch, so a new iCloud photo shows up on the next start."""
+    try:
+        if not email_addr or email_addr.lower() not in mac_icloud_addresses():
+            raise FileNotFoundError
+        r = subprocess.run(["dscl", ".", "-read", f"/Users/{pwd.getpwuid(os.getuid()).pw_name}", "JPEGPhoto"],
+                           capture_output=True, text=True, timeout=10)
+        hex_data = "".join(r.stdout.split("\n", 1)[1].split()) if r.returncode == 0 and "\n" in r.stdout else ""
+        data = bytes.fromhex(hex_data) if hex_data else b""
+        if not image_type(data):
+            raise FileNotFoundError  # no custom picture set (only a stock one), so keep the initial
+        os.makedirs(CONFIG_DIR, mode=0o700, exist_ok=True)
+        raw = f"{PHOTO_ICLOUD}.{os.getpid()}.src"
+        _write_private(raw, data)
+        out = f"{PHOTO_ICLOUD}.{os.getpid()}.tmp"
+        subprocess.run(["sips", "-s", "format", "jpeg", "-Z", "256", raw, "--out", out],
+                       capture_output=True, timeout=30, check=True)
+        os.chmod(out, 0o600)
+        os.replace(out, PHOTO_ICLOUD)
+        os.remove(raw)
+        return True
+    except Exception:
+        for path in (PHOTO_ICLOUD, f"{PHOTO_ICLOUD}.{os.getpid()}.src", f"{PHOTO_ICLOUD}.{os.getpid()}.tmp"):
+            try:
+                os.remove(path)
+            except FileNotFoundError:
+                pass
+        return False
+
+
+def photo_file(settings=None):
+    """The image to show for the account, following the user's choice."""
+    choice = (settings or load_settings())["photo"]
+    if choice == "custom" and os.path.exists(PHOTO_CUSTOM):
+        return PHOTO_CUSTOM
+    if choice == "icloud" and os.path.exists(PHOTO_ICLOUD):
+        return PHOTO_ICLOUD
+    return None
+
+
+def save_photo(b64):
+    try:
+        data = base64.b64decode(b64, validate=True)
+    except (ValueError, TypeError):
+        raise MailError("That file couldn't be read")
+    if len(data) > 10 * 1024 * 1024:
+        raise MailError("Choose a photo smaller than 10 MB")
+    if not image_type(data):
+        raise MailError("Choose a JPEG, PNG, WebP or GIF image")
+    _write_private(PHOTO_CUSTOM, data)
+    return save_settings({"photo": "custom"})
 
 
 def save_background(b64):
@@ -639,6 +722,7 @@ def sign_in(app, data):
     save_config(cfg)
     app["mail"] = Mail(cfg, password)
     app["mail"].warm_up()
+    threading.Thread(target=sync_icloud_photo, args=(addr,), daemon=True).start()
     checkin(cfg, force=True)
 
 
@@ -656,6 +740,11 @@ def sign_out(app):
     cfg.pop("email", None)
     cfg.pop("last_checkin", None)
     clear_cache()
+    for path in (PHOTO_ICLOUD, PHOTO_CUSTOM):
+        try:
+            os.remove(path)
+        except FileNotFoundError:
+            pass
     save_config(cfg)
     app["mail"] = None
 
@@ -1503,6 +1592,16 @@ def make_handler(app, port):
                     return self._send(401, b"Open the app with: python3 server.py", "text/plain")
                 return self._send(200, render_index(app), "text/html; charset=utf-8")
 
+            if path == "/photo":
+                if not self._guard(api=False) or not self._authed():
+                    return self._send(403, b"Forbidden", "text/plain")
+                file = photo_file()
+                if not file:
+                    return self._send(404, b"Not found", "text/plain")
+                with open(file, "rb") as f:
+                    data = f.read()
+                return self._send(200, data, image_type(data) or "application/octet-stream")
+
             if path == "/background":
                 # Loaded by CSS (which can't send custom headers), so cookie auth only.
                 if not self._guard(api=False) or not self._authed():
@@ -1582,6 +1681,8 @@ def make_handler(app, port):
                 return self._api(ok(lambda: sign_out(app)))
             if path == "/api/settings":
                 return self._api(lambda: save_settings(data))
+            if path == "/api/photo":
+                return self._api(lambda: (save_photo(data.get("data", "")), me_info(app))[1])
             if path == "/api/background":
                 return self._api(lambda: save_background(data.get("data", "")))
             mail = app["mail"]
@@ -1609,7 +1710,12 @@ def me_info(app):
     if not app["mail"]:
         return {"setupRequired": True, "version": APP_VERSION}
     cfg = app["cfg"]
-    return {"email": cfg["email"], "name": cfg.get("name", ""), "version": APP_VERSION}
+    settings = load_settings()
+    file = photo_file(settings)
+    return {"email": cfg["email"], "name": cfg.get("name", ""), "version": APP_VERSION,
+            "photo": f"/photo?v={int(os.path.getmtime(file))}-{settings['photo']}" if file else None,
+            "photoChoice": settings["photo"],
+            "hasICloudPhoto": os.path.exists(PHOTO_ICLOUD), "hasCustomPhoto": os.path.exists(PHOTO_CUSTOM)}
 
 
 def render_index(app):
@@ -1653,6 +1759,7 @@ def main():
         if password:
             app["mail"] = Mail(cfg, password)
             app["mail"].warm_up()  # sign in to iCloud while the window opens
+            threading.Thread(target=sync_icloud_photo, args=(cfg["email"],), daemon=True).start()
 
     try:
         httpd = ThreadingHTTPServer(("127.0.0.1", args.port or cfg.get("port", 8025)), BaseHTTPRequestHandler)
