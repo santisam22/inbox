@@ -1089,10 +1089,40 @@ async function refreshMe() {
 }
 
 function showAccountMenu(anchor) {
-  showMenu(anchor, state.me.email, [{
-    label: "Sign out", icon: "close",
-    run: signOut,
-  }]);
+  const me = state.me;
+  showMenu(anchor, me.email, [
+    { label: me.photo ? "Change profile photo…" : "Add profile photo…", icon: "image", run: pickPhoto },
+    ...(me.photoChoice === "custom" && me.hasICloudPhoto ? [{ label: "Use iCloud photo", icon: "person", run: () => setPhotoChoice("icloud") }] : []),
+    ...(me.photo ? [{ label: "Remove photo (show initial)", icon: "close", run: () => setPhotoChoice("none") }] : []),
+    { label: "Settings…", icon: "settings", run: () => openSettings() },
+    { label: "Sign out", icon: "back", run: signOut },
+  ]);
+}
+
+/** Open the file picker for a custom profile photo (works from a menu click: it's a user gesture). */
+function pickPhoto() {
+  const input = Object.assign(document.createElement("input"), { type: "file", accept: "image/jpeg,image/png,image/webp,image/gif" });
+  input.addEventListener("change", () => { if (input.files[0]) uploadPhoto(input.files[0]); });
+  input.click();
+}
+
+async function uploadPhoto(file) {
+  if (file.size > 10 * 1024 * 1024) return toast("Choose a photo smaller than 10 MB.");
+  try {
+    const dataUrl = await new Promise((ok, fail) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = fail; r.readAsDataURL(file); });
+    state.me = await api("/api/photo", { data: dataUrl.split(",")[1] });
+    state.settings.photo = "custom";
+    renderAccountButton();
+    if (state.view === "settings") renderSettings();
+    toast("Profile photo updated.");
+  } catch (err) {
+    toast(err.message);
+  }
+}
+
+async function setPhotoChoice(choice) {
+  await updateSettings({ photo: choice });
+  refreshMe();
 }
 
 // ------------------------------------------------------------------ update banner
@@ -1274,7 +1304,8 @@ function renderSettings() {
         : "No iCloud photo found. This Mac needs to be signed in to the same Apple Account, with a photo set.")
       : s.photo === "custom" ? "A photo you chose." : "Your initial."}</span></div>
       ${seg("photo", [["icloud", "iCloud"], ["custom", "Custom"], ["none", "Initial"]])}</div>
-    ${s.photo === "custom" ? `<div class="setting"><div class="label"><b>${state.me?.hasCustomPhoto ? "Change photo" : "Choose a photo"}</b><span>JPEG, PNG, WebP or GIF, up to 10 MB.</span></div>
+    ${s.photo === "custom" || !state.me?.photo ? `<div class="setting"><div class="label"><b>${state.me?.hasCustomPhoto ? "Change photo" : "Add your own photo"}</b><span>${
+      state.me?.photo ? "" : "Replace the letter in the corner with a photo. "}JPEG, PNG, WebP or GIF, up to 10 MB.</span></div>
       <label class="pill">Choose photo…<input type="file" accept="image/jpeg,image/png,image/webp,image/gif" data-photo-upload hidden></label></div>` : ""}
     <div class="setting"><div class="label"><b>Inbox ${esc(state.me?.version || "")}</b><span>Updates install automatically when you click Update now.</span></div>
       ${native ? `<button class="pill" data-settings-action="checkUpdates">Check for updates</button>` : ""}</div>
@@ -1324,19 +1355,7 @@ document.addEventListener("change", async (e) => {
   }
   if (t.matches("[data-dim]")) updateSettings({ backgroundDim: +t.value }, { rerender: false });
   if (t.matches("[data-color]")) updateSettings({ accent: t.value });
-  if (t.matches("[data-photo-upload]") && t.files[0]) {
-    const file = t.files[0];
-    if (file.size > 10 * 1024 * 1024) return toast("Choose a photo smaller than 10 MB.");
-    try {
-      const dataUrl = await new Promise((ok, fail) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = fail; r.readAsDataURL(file); });
-      state.me = await api("/api/photo", { data: dataUrl.split(",")[1] });
-      state.settings.photo = "custom";
-      renderAccountButton();
-      renderSettings();
-    } catch (err) {
-      toast(err.message);
-    }
-  }
+  if (t.matches("[data-photo-upload]") && t.files[0]) uploadPhoto(t.files[0]);
   if (t.matches("[data-bg-upload]") && t.files[0]) {
     const file = t.files[0];
     if (file.size > 20 * 1024 * 1024) return toast("Choose an image smaller than 20 MB.");
