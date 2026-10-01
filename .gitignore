@@ -10,3 +10,6 @@ __pycache__/
 
 # Local editor/tool settings
 .claude/
+
+# Private files: never committed (and *.nosync is skipped by iCloud Drive)
+*.nosync/
