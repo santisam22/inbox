@@ -24,7 +24,7 @@ typeset -A PY_SHA256=(
 )
 
 rm -rf "$DIST"
-mkdir -p "$DIST" "$CACHE" "$APP/Contents/MacOS" "$RES/server/static" "$RES/python"
+mkdir -p "$DIST" "$CACHE" "$APP/Contents/MacOS" "$RES/server/static"
 
 echo "→ Compiling (Apple silicon + Intel)…"
 for arch in arm64 x86_64; do
@@ -33,9 +33,11 @@ for arch in arm64 x86_64; do
 done
 lipo -create "$BUILD/Inbox-arm64" "$BUILD/Inbox-x86_64" -output "$APP/Contents/MacOS/Inbox"
 
-echo "→ Bundling Python $PY_VERSION…"
+echo "→ Bundling Python $PY_VERSION (Universal)…"
+# Both architectures are downloaded, then merged into ONE Universal Python: every binary
+# holds Apple silicon and Intel code. macOS flags apps containing Intel-only parts as
+# "Intel-based" (unsupported from macOS 28), even if those parts never run on your Mac.
 for pyarch in aarch64 x86_64; do
-  appArch=${pyarch/aarch64/arm64}
   file="cpython-$PY_VERSION+$PY_RELEASE-$pyarch-apple-darwin-install_only_stripped.tar.gz"
   if [[ ! -f "$CACHE/$file" ]]; then
     curl -sSfL -o "$CACHE/$file.part" \
@@ -45,7 +47,7 @@ for pyarch in aarch64 x86_64; do
   echo "${PY_SHA256[$pyarch]}  $CACHE/$file" | shasum -a 256 -c --quiet - \
     || { echo "Checksum mismatch for $file"; rm -f "$CACHE/$file"; exit 1; }
 
-  dest=$RES/python/$appArch
+  dest=$BUILD/python-$pyarch
   mkdir -p "$dest"
   tar -xzf "$CACHE/$file" -C "$dest" --strip-components 1
 
@@ -58,23 +60,33 @@ for pyarch in aarch64 x86_64; do
            turtle.py lib-dynload/_tkinter*.so )
 done
 
+# Merge: start from the Apple silicon tree, then fuse each binary with its Intel twin.
+ditto "$BUILD/python-aarch64" "$RES/python"
+( cd "$BUILD/python-aarch64" && find . -type f -print0 | xargs -0 file | grep "Mach-O" | cut -d: -f1 ) | while read -r bin; do
+  [[ -f "$BUILD/python-x86_64/$bin" ]] || { echo "  missing Intel twin for $bin"; exit 1; }
+  lipo -create "$BUILD/python-aarch64/$bin" "$BUILD/python-x86_64/$bin" -output "$RES/python/$bin"
+done
+( cd "$BUILD/python-x86_64" && find . -type f -print0 | xargs -0 file | grep "Mach-O" | cut -d: -f1 ) | while read -r bin; do
+  [[ -f "$BUILD/python-aarch64/$bin" ]] || { echo "  Intel-only binary $bin has no Apple silicon twin"; exit 1; }
+done
+NOT_UNIVERSAL=$(find "$RES/python" -type f -print0 | xargs -0 file | grep "Mach-O" | grep -v "universal binary" | grep -v "(for architecture" || true)
+[[ -z "$NOT_UNIVERSAL" ]] || { echo "Not Universal:"; echo "$NOT_UNIVERSAL"; exit 1; }
+
 echo "→ Precompiling the Python modules Inbox uses…"
 # Without bytecode, Python recompiles these on every launch (~0.3 s). Hash-based .pyc
-# files stay valid however the app is copied, and are the same for both architectures.
-PY=$RES/python/arm64/bin/python3
+# files stay valid however the app is copied.
+PY=$RES/python/bin/python3
 MODULES=$("$PY" -I -B -c '
 import os, sys
 sys.path.insert(0, sys.argv[1]); import server
 lib = os.path.dirname(os.__file__)
 print("\n".join(sorted({os.path.relpath(m.__file__, lib) for m in list(sys.modules.values())
     if (getattr(m, "__file__", None) or "").startswith(lib) and m.__file__.endswith(".py")})))' "$ROOT")
-for arch in arm64 x86_64; do
-  print -r -- "$MODULES" | "$PY" -I -B -c '
+print -r -- "$MODULES" | "$PY" -I -B -c '
 import py_compile, sys
 for rel in sys.stdin.read().split():
     py_compile.compile(f"{sys.argv[1]}/{rel}", doraise=True,
-                       invalidation_mode=py_compile.PycInvalidationMode.UNCHECKED_HASH)' "$RES/python/$arch/lib/python3.13"
-done
+                       invalidation_mode=py_compile.PycInvalidationMode.UNCHECKED_HASH)' "$RES/python/lib/python3.13"
 echo "  $(print -r -- "$MODULES" | wc -l | tr -d ' ') modules"
 
 echo "→ Drawing icon…"
@@ -96,7 +108,7 @@ cp server.py "$RES/server/"
 cp static/index.html static/app.js static/app.css "$RES/server/static/"
 # Sign every bundled binary first (inside-out), then the app itself.
 find "$RES/python" -type f \( -name "*.so" -o -name "*.dylib" -o -perm -u+x \) -print0 \
-  | xargs -0 file | grep "Mach-O" | cut -d: -f1 \
+  | xargs -0 file | grep "Mach-O" | grep -v "(for architecture" | cut -d: -f1 \
   | while read -r bin; do codesign --force --sign - "$bin" 2>/dev/null; done
 xattr -cr "$APP"
 codesign --force --sign - "$APP"

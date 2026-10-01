@@ -165,14 +165,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate,
 
     // MARK: server process
 
-    /// The Python bundled in Contents/Resources/python/<arch>, if present.
+    /// The Python bundled in Contents/Resources/python. It's Universal, so macOS runs the
+    /// native half on both Apple silicon and Intel (no Rosetta).
     func bundledPython() -> String? {
-        #if arch(arm64)
-        let arch = "arm64"
-        #else
-        let arch = "x86_64"
-        #endif
-        guard let path = Bundle.main.resourceURL?.appendingPathComponent("python/\(arch)/bin/python3").path,
+        guard let path = Bundle.main.resourceURL?.appendingPathComponent("python/bin/python3").path,
               FileManager.default.isExecutableFile(atPath: path) else { return nil }
         return path
     }
