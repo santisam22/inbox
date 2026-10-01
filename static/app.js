@@ -565,6 +565,7 @@ function renderMessage() {
       fit();
       new ResizeObserver(fit).observe(doc.documentElement);
       doc.addEventListener("keydown", onKey);
+      doc.addEventListener("contextmenu", (e) => e.preventDefault());  // no right-click menu in email bodies
     });
     frame.srcdoc = emailDocument(m.html, allowImages);
   }
@@ -1002,6 +1003,14 @@ function onKey(e) {
   if (handlers[k]) { e.preventDefault(); handlers[k](); }
 }
 document.addEventListener("keydown", onKey);
+
+// Right-click menus are off: every action has a button, and the browser's own menu
+// (Reload, Open Link, Back…) only led away from the app. Text boxes keep theirs for
+// spelling suggestions and paste.
+document.addEventListener("contextmenu", (e) => {
+  if (e.target.closest?.("input, textarea, [contenteditable]")) return;
+  e.preventDefault();
+});
 
 window.addEventListener("beforeunload", (e) => { if (composeDirty()) e.preventDefault(); });
 window.addEventListener("hashchange", route);
