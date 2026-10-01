@@ -22,6 +22,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate,
     var quitting = false
     let updater = Updater()
     var titleObservation: NSKeyValueObservation?
+    var justUpdated: (version: String, notes: String)?  // shown once, after an update installs
 
     // MARK: lifecycle
 
@@ -37,6 +38,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate,
         }
         updater.onStatus = { [weak self] state, message in self?.callJS("updateStatus", [state, message]) }
         updater.start()
+        noteIfJustUpdated()
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
@@ -401,6 +403,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate,
         }
     }
 
+    /// Remembers the version that last ran. If this one is newer, it was just updated.
+    /// (Versions before 1.3.2 didn't record this, so "Inbox has run on this Mac before"
+    /// stands in for the first time.)
+    func noteIfJustUpdated() {
+        let defaults = UserDefaults.standard
+        let current = updater.currentVersion
+        let ranBefore = FileManager.default.fileExists(
+            atPath: FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".icloud-mail/config.json").path)
+        let updated = defaults.string(forKey: "LastRunVersion").map { Updater.isNewer(current, than: $0) } ?? ranBefore
+        if updated {
+            justUpdated = (current, Bundle.main.object(forInfoDictionaryKey: "InboxWhatsNew") as? String ?? "")
+        }
+        defaults.set(current, forKey: "LastRunVersion")
+    }
+
     func showUpdateBanner(_ info: UpdateInfo) {
         callJS("updateAvailable", [["version": info.version, "notes": info.notes ?? ""]])
     }
@@ -484,6 +501,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate,
     // Re-show a pending update banner whenever the app page (re)loads.
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         if let url = webView.url, isAppURL(url), let info = updater.available { showUpdateBanner(info) }
+        if let url = webView.url, isAppURL(url), let done = justUpdated {
+            justUpdated = nil
+            callJS("updateInstalled", [["version": done.version, "notes": done.notes]])
+        }
     }
 
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {

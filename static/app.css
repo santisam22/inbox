@@ -455,6 +455,8 @@ body.no-snippets .row .snippet { display: none; }
   padding: 8px 8px 8px 16px; background: var(--nav-active); color: var(--text); font-size: 13px;
 }
 .update-banner > .ic { color: var(--accent); }
+.update-banner.success { background: color-mix(in srgb, #16a34a 16%, var(--surface)); }
+.update-banner.success > .ic { color: #16a34a; }
 .update-banner .text { flex: 1; min-width: 0; }
 .update-banner .text.error { color: var(--danger); }
 .update-btn { height: 32px; padding: 0 16px; border-radius: 16px; background: var(--accent); color: var(--accent-text); font-weight: 600; white-space: nowrap; }

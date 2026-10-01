@@ -1557,11 +1557,17 @@ function finishBoot() {
   document.body.classList.remove("booting");
 }
 
+function updateInstalled(info) {
+  renderUpdateBanner(`${icon("doneAll")}<div class="text"><b>Inbox ${esc(info.version)} was installed successfully!</b> ${esc(info.notes || "")}</div>
+    <button class="icon-btn" data-update="later" title="Close">${icon("close")}</button>`, { force: true });
+  $("#updateBanner").classList.add("success");
+}
+
 // Hooks for the native Inbox.app wrapper (⌘N, ⌘, mailto: links, updates).
 window.inboxApp = {
   compose: (prefill) => state.me && openCompose(prefill || {}),
   openSettings: () => state.me && openSettings(),
-  updateAvailable, updateStatus,
+  updateAvailable, updateStatus, updateInstalled,
 };
 
 // ------------------------------------------------------------------ boot

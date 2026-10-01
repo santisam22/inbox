@@ -89,6 +89,8 @@ iconutil -c icns "$ICONSET" -o "$RES/AppIcon.icns"
 
 echo "→ Assembling and signing app…"
 cp macos/Info.plist "$APP/Contents/Info.plist"
+# The "what's new" line, shown in the "installed successfully" banner after an update.
+plutil -insert InboxWhatsNew -string "$(head -1 WHATS_NEW.txt 2>/dev/null)" "$APP/Contents/Info.plist"
 cp server.py "$RES/server/"
 [[ -f app_config.json ]] && cp app_config.json "$RES/server/"
 cp static/index.html static/app.js static/app.css "$RES/server/static/"
