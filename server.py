@@ -521,6 +521,8 @@ class CategoryIndex:
         self.complete = False
         self.refreshed_at = 0.0
         self._memo = (None, None)
+        self.overrides = {}     # uid -> tab id, or "unsorted": emails you moved to a tab by hand
+        self._overrides_version = 0
         try:
             with open(INDEX_FILE) as f:
                 saved = json.load(f)
@@ -528,13 +530,15 @@ class CategoryIndex:
                 self.entries = {int(k): v for k, v in saved["entries"].items()}
                 self.uidvalidity = saved.get("uidvalidity")
                 self.total = len(self.entries)
+                self.overrides = {int(k): v for k, v in saved.get("overrides", {}).items()}
         except (FileNotFoundError, json.JSONDecodeError, KeyError, ValueError):
             pass
 
     def save(self):
         with self.lock:
             data = {"email": self.mail.user, "uidvalidity": self.uidvalidity,
-                    "entries": {str(k): v for k, v in self.entries.items()}}
+                    "entries": {str(k): v for k, v in self.entries.items()},
+                    "overrides": {str(k): v for k, v in self.overrides.items()}}
         _write_private(INDEX_FILE, json.dumps(data, separators=(",", ":")).encode())
 
     def status(self):
@@ -565,9 +569,12 @@ class CategoryIndex:
         unseen = {int(x) for x in (d[0] or b"").split()}
         with self.lock:
             if uidvalidity != self.uidvalidity:  # mailbox was rebuilt: UIDs mean something else now
-                self.entries, self.uidvalidity = {}, uidvalidity
+                self.entries, self.overrides, self.uidvalidity = {}, {}, uidvalidity
+                self._overrides_version += 1
             for gone in set(self.entries) - current:
                 del self.entries[gone]
+            for gone in set(self.overrides) - current:
+                del self.overrides[gone]
             self.unseen, self.total = unseen, len(current)
             new = sorted(current - set(self.entries), reverse=True)  # newest first
         for i in range(0, len(new), 500):
@@ -588,13 +595,22 @@ class CategoryIndex:
     def assignments(self, categories, unsorted=()):
         """uid -> category id for the current rules, applied to every message (old and new); memoized."""
         sorter = Sorter(categories, unsorted)
+        enabled = {c["id"] for c in categories if c.get("enabled")}
         with self.lock:
-            key = (json.dumps([categories, list(unsorted)], sort_keys=True), len(self.entries), max(self.entries, default=0))
+            key = (json.dumps([categories, list(unsorted)], sort_keys=True), len(self.entries),
+                   max(self.entries, default=0), self._overrides_version)
             if self._memo[0] == key:
                 return self._memo[1]
             items = list(self.entries.items())
+            overrides = dict(self.overrides)
         result = {}
         for uid, (sender, address, subject) in items:
+            manual = overrides.get(uid)
+            if manual == "unsorted":
+                continue  # moved by hand to All mail only
+            if manual in enabled:
+                result[uid] = manual  # moved by hand: beats sender rules and keywords
+                continue
             cid = sorter.classify(sender, address, subject)
             if cid:
                 result[uid] = cid
@@ -615,6 +631,17 @@ class CategoryIndex:
             if cid:
                 counts[cid] = counts.get(cid, 0) + 1
         return counts
+
+    def set_overrides(self, uids, tab):
+        """Move specific emails to a tab by hand (tab=None: back to automatic sorting)."""
+        with self.lock:
+            for uid in uids:
+                if tab is None:
+                    self.overrides.pop(uid, None)
+                else:
+                    self.overrides[uid] = tab
+            self._overrides_version += 1
+        self.save()
 
     def note_seen(self, uids, seen):
         with self.lock:
@@ -1583,6 +1610,14 @@ class Mail:
             save_settings({"folderColors": colors})
         return {"moved": moved}
 
+    def tab_messages(self, uids, tab):
+        uids = [int(u) for u in uids][:5000]
+        valid = {c["id"] for c in load_settings()["categories"]}
+        if tab is not None and tab != "unsorted" and tab not in valid:
+            raise MailError("There's no such tab")
+        self.index.set_overrides(uids, tab)
+        return {"moved": len(uids)}
+
     def categories_status(self):
         self.index.refresh_soon()
         return {"indexing": self.index.status(),
@@ -1896,6 +1931,7 @@ def make_handler(app, port):
                 "/api/mark-all-read": lambda: mail.mark_all_read(data["folder"], data.get("category", "")),
                 "/api/empty": lambda: mail.empty_folder(data["folder"]),
                 "/api/folders/create": lambda: mail.create_folder(data.get("name", "")),
+                "/api/tab-messages": lambda: mail.tab_messages(data.get("uids", []), data.get("tab")),
                 "/api/folders/rename": lambda: mail.rename_folder(data["name"], data.get("newName", "")),
                 "/api/folders/delete": lambda: mail.delete_folder(data["name"]),
             }

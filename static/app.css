@@ -189,6 +189,9 @@ button.avatar.account { padding: 0; }
   font-size: 11px; font-weight: 600; line-height: 16px; padding: 0 6px; border-radius: 4px; margin-right: 8px; vertical-align: 1px;
 }
 .msg h1 .folder-badge { font-size: 12px; line-height: 20px; vertical-align: middle; }
+.menu-toggle { display: flex; gap: 2px; margin: 0 12px 6px; padding: 2px; border: 1px solid var(--border); border-radius: 16px; }
+.menu .menu-toggle button { flex: 1; justify-content: center; height: 28px; padding: 0 10px; border-radius: 14px; font-size: 13px; color: var(--muted); white-space: nowrap; }
+.menu .menu-toggle button.on { background: var(--nav-active); color: var(--text); font-weight: 600; }
 .menu-swatches { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 16px 10px; }
 .menu-swatches > span { width: 100%; font-size: 12px; color: var(--muted); }
 .menu .menu-swatches button.swatch {

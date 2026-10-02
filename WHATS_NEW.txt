@@ -1,1 +1,1 @@
-Select emails and click the tag button to assign their senders to a tab in one step.
+Move to tab now lets you move just the selected emails, or everything from their senders.

@@ -342,8 +342,8 @@ const TOOLS = {
   star: { label: "Star", icon: "star", when: "selection", show: () => selectedMsgs().some((m) => !m.flagged), run: () => setFlag("\\Flagged", true) },
   unstar: { label: "Remove star", icon: "starOutline", when: "selection", show: () => selectedMsgs().some((m) => m.flagged), run: () => setFlag("\\Flagged", false) },
   move: { label: "Move to", icon: "move", when: "selection", run: (anchor) => showMoveMenu(anchor) },
-  senderTab: { label: "Assign sender to a tab", icon: "label", when: "selection", show: () => enabledCategories().length > 0,
-    run: (anchor) => showSenderMenu(anchor, selectedMsgs().map((m) => m.from?.[0]?.email)) },
+  senderTab: { label: "Move to tab", icon: "label", when: "selection", show: () => enabledCategories().length > 0,
+    run: (anchor) => showTabMenu(anchor, selectedMsgs()) },
 };
 const toolLabel = (id) => { const l = TOOLS[id].label; return typeof l === "function" ? l() : l; };
 const toolApplies = (id, context) => TOOLS[id] && TOOLS[id].when === context && (!TOOLS[id].show || TOOLS[id].show());
@@ -475,7 +475,7 @@ function renderToolbar() {
     tb.innerHTML = `${btn("back", "back", `Back to ${esc(folderLabel(state.folder))} (u)`)}
       <span class="divider"></span>${destructive()}
       <span class="divider"></span>${btn("unread", "mail", "Mark as unread (Shift+U)")}${btn("moveMenu", "move", "Move to")}
-      ${(state.settings.categories || []).some((c) => c.enabled) ? btn("senderMenu", "label", "Move sender to tab") : ""}
+      ${(state.settings.categories || []).some((c) => c.enabled) ? btn("senderMenu", "label", "Move to tab") : ""}
       <span class="spacer"></span><span class="range">${pos}</span>
       ${btn("newer", "left", "Newer (k)", idx > 0 ? "" : "disabled")}${btn("older", "right", "Older (j)", idx >= 0 && idx < msgs.length - 1 ? "" : "disabled")}`;
     return;
@@ -803,7 +803,9 @@ function showMenu(anchor, title, items) {
       ${hex ? `style="background:${hex}"` : ""}>${hex ? "" : icon("close")}</button>`).join("")}</div>`;
   host.innerHTML = `<div class="menu" role="menu" style="top:${r.bottom + 4}px;left:${Math.min(r.left, innerWidth - 260)}px">
     ${title ? `<div class="menu-title">${esc(title)}</div>` : ""}
-    ${items.map((it, i) => (it.swatches ? swatchRow(it, i)
+    ${items.map((it, i) => (it.toggle ? `<div class="menu-toggle" role="radiogroup">${it.toggle.map(([v, label]) =>
+        `<button role="radio" aria-checked="${it.current === v}" class="${it.current === v ? "on" : ""}" data-i="${i}" data-mode="${v}">${esc(label)}</button>`).join("")}</div>`
+      : it.swatches ? swatchRow(it, i)
       : `<button role="menuitem" class="${it.danger ? "danger" : ""}" data-i="${i}">${coloredIcon(it.icon, it.color)}${esc(it.label)}</button>`)).join("")}</div>`;
   const menu = $(".menu", host);
   // Open upward when there isn't room below (e.g. folders near the bottom of the sidebar).
@@ -812,6 +814,11 @@ function showMenu(anchor, title, items) {
   menu.addEventListener("click", (e) => {
     const b = e.target.closest("button[data-i]");
     if (!b) return;
+    if (b.dataset.mode !== undefined) {  // switch row: re-open in the chosen mode, keep the menu up
+      e.stopPropagation();
+      items[+b.dataset.i].run(b.dataset.mode);
+      return;
+    }
     closeMenu();
     if (b.dataset.hex !== undefined) items[+b.dataset.i].run(b.dataset.hex);
     else items[+b.dataset.i].run();
@@ -1054,7 +1061,7 @@ document.addEventListener("click", (e) => {
     case "refresh": loadFolders(); loadList(); loadCategoryStatus(); break;
     case "selectMenu": e.stopPropagation(); showSelectMenu(actionEl); break;
     case "moreMenu": e.stopPropagation(); showMoreMenu(actionEl); break;
-    case "senderMenu": e.stopPropagation(); showSenderMenu(actionEl); break;
+    case "senderMenu": e.stopPropagation(); showTabMenu(actionEl, [state.message]); break;
     case "prevPage": go({ page: state.page - 1, uid: null }); break;
     case "nextPage": go({ page: state.page + 1, uid: null }); break;
     case "back": go({ uid: null }); break;
@@ -1720,25 +1727,71 @@ function senderRuleFor(address) {
   return null;
 }
 
-/** "Always put mail from … in:" for the open email's sender, or every sender of the selected emails. */
-function showSenderMenu(anchor, addresses) {
-  addresses = [...new Set((addresses || [state.message?.from?.[0]?.email]).filter(Boolean).map((a) => a.toLowerCase()))];
-  if (!addresses.length) return;
-  const rules = [...new Set(addresses.map(senderRuleFor))];
-  const current = rules.length === 1 ? rules[0] : undefined;  // a ✓ only when they all share one rule
-  const mark = (on) => (on ? " ✓" : "");
-  const done = (target) => () => {
-    assignSenders(addresses, target);
-    if (state.view === "list") { state.selected.clear(); render(); }
+/**
+ * "Move to tab" for the open email or the selected emails, in one of two modes:
+ *   emails:  just these emails move (by hand; future mail is sorted normally)
+ *   senders: everything from their senders, past and future (a sender rule)
+ * The last mode used is remembered. Outside the Inbox only "senders" makes sense.
+ */
+function showTabMenu(anchor, msgs) {
+  msgs = (msgs || []).filter((m) => m?.uid);
+  if (!msgs.length) return;
+  const inInbox = state.folder === (state.roles.inbox || "INBOX");
+  let mode = inInbox ? store.get("tabMoveMode", "emails") : "senders";
+  const addresses = [...new Set(msgs.map((m) => m.from?.[0]?.email?.toLowerCase()).filter(Boolean))];
+  const uids = msgs.map((m) => m.uid);
+  const tabIcon = (c) => CATEGORY_ICONS[c.id] || "label";
+
+  const open = () => {
+    const items = [];
+    if (inInbox) {
+      items.push({ toggle: [["emails", msgs.length === 1 ? "This email" : `These ${msgs.length} emails`],
+                            ["senders", addresses.length === 1 ? "Its sender" : "Their senders"]],
+                   current: mode, run: (m) => { mode = m; store.set("tabMoveMode", m); open(); } });
+    }
+    if (mode === "emails") {
+      items.push(...enabledCategories().map((c) => ({ label: c.name, icon: tabIcon(c), run: () => moveEmailsToTab(uids, c.id) })));
+      items.push({ label: "All mail only", icon: "inbox", run: () => moveEmailsToTab(uids, "unsorted") });
+      items.push({ label: "Back to automatic sorting", icon: "refresh", run: () => moveEmailsToTab(uids, null) });
+    } else {
+      const rules = [...new Set(addresses.map(senderRuleFor))];
+      const current = rules.length === 1 ? rules[0] : undefined;  // a ✓ only when they all share one rule
+      const mark = (on) => (on ? " ✓" : "");
+      const done = (target) => () => {
+        assignSenders(addresses, target);
+        if (state.view === "list") { state.selected.clear(); render(); }
+      };
+      items.push(...enabledCategories().map((c) => ({ label: c.name + mark(current === c.id), icon: tabIcon(c), run: done(c.id) })));
+      items.push({ label: "All mail only (don't sort)" + mark(current === "unsorted"), icon: "inbox", run: done("unsorted") });
+      if (rules.some(Boolean)) items.push({ label: "Remove rule (sort by keywords)", icon: "close", run: done(null) });
+    }
+    items.push({ label: "Edit tabs…", icon: "settings", run: () => openSettings("tabs") });
+    const title = mode === "emails"
+      ? `Move ${msgs.length === 1 ? "this email" : `these ${msgs.length} emails`} to:`
+      : `Always put all mail from ${addresses.length === 1 ? addresses[0] : `these ${addresses.length} senders`} in:`;
+    showMenu(anchor, title, items);
   };
-  const who = addresses.length === 1 ? addresses[0] : `these ${addresses.length} senders`;
-  showMenu(anchor, `Always put mail from ${who} in:`, [
-    ...enabledCategories().map((c) => ({ label: c.name + mark(current === c.id), icon: CATEGORY_ICONS[c.id] || "label", run: done(c.id) })),
-    { label: "All mail only (don't sort)" + mark(current === "unsorted"), icon: "inbox", run: done("unsorted") },
-    ...(rules.some(Boolean) ? [{ label: "Remove rule (sort by keywords)", icon: "close", run: done(null) }] : []),
-    { label: "Edit tabs…", icon: "settings", run: () => openSettings("tabs") },
-  ]);
+  open();
 }
+
+/** Move specific emails to a tab by hand (tab=null: back to automatic sorting). */
+async function moveEmailsToTab(uids, tab) {
+  try {
+    await api("/api/tab-messages", { uids, tab });
+  } catch (e) {
+    return toast(e.message);
+  }
+  const what = uids.length === 1 ? "1 email" : `${uids.length} emails`;
+  toast(tab === null ? `${what} will be sorted automatically again.`
+    : `Moved ${what} to ${tab === "unsorted" ? "All mail only" : categoryName(tab)}.`);
+  state.listStale = true;
+  if (state.view === "list") {
+    state.selected.clear();
+    if (state.category) loadList({ quiet: true }); else render();
+  }
+  loadCategoryStatus();
+}
+
 const catIndex = (el) => +el.closest("[data-cat]").dataset.cat;
 
 document.addEventListener("click", (e) => {
