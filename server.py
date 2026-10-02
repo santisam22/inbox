@@ -107,7 +107,7 @@ DEFAULT_CATEGORIES = [
         "black friday", "cyber monday", "last chance", "ends tonight", "newsletter", "offer", "save big"]},
 ]
 TOOL_IDS = ["refresh", "markAllRead", "emptyFolder", "archive", "spam", "delete",
-            "markRead", "markUnread", "star", "unstar", "move"]
+            "markRead", "markUnread", "star", "unstar", "move", "senderTab"]
 DEFAULT_TOOLBAR = [{"id": t, "on": t != "unstar"} for t in TOOL_IDS]
 
 DEFAULT_SETTINGS = {

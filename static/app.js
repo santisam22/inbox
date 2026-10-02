@@ -342,6 +342,8 @@ const TOOLS = {
   star: { label: "Star", icon: "star", when: "selection", show: () => selectedMsgs().some((m) => !m.flagged), run: () => setFlag("\\Flagged", true) },
   unstar: { label: "Remove star", icon: "starOutline", when: "selection", show: () => selectedMsgs().some((m) => m.flagged), run: () => setFlag("\\Flagged", false) },
   move: { label: "Move to", icon: "move", when: "selection", run: (anchor) => showMoveMenu(anchor) },
+  senderTab: { label: "Assign sender to a tab", icon: "label", when: "selection", show: () => enabledCategories().length > 0,
+    run: (anchor) => showSenderMenu(anchor, selectedMsgs().map((m) => m.from?.[0]?.email)) },
 };
 const toolLabel = (id) => { const l = TOOLS[id].label; return typeof l === "function" ? l() : l; };
 const toolApplies = (id, context) => TOOLS[id] && TOOLS[id].when === context && (!TOOLS[id].show || TOOLS[id].show());
@@ -1696,15 +1698,19 @@ function normalizeSender(value) {
 }
 
 /** Pin a sender to a tab ("unsorted" = All mail only, null = back to keywords). Applies to all past mail too. */
-function assignSender(address, target) {
-  const cats = catCopy().map((c) => ({ ...c, senders: c.senders.filter((x) => x !== address) }));
-  const unsorted = (state.settings.unsortedSenders || []).filter((x) => x !== address);
-  if (target === "unsorted") unsorted.push(address);
-  else if (target) cats.find((c) => c.id === target)?.senders.push(address);
+/** Pin senders to a tab ("unsorted" = All mail only, null = back to keywords). Applies to all past mail too. */
+function assignSenders(addresses, target) {
+  const set = new Set(addresses);
+  const cats = catCopy().map((c) => ({ ...c, senders: c.senders.filter((x) => !set.has(x)) }));
+  const unsorted = (state.settings.unsortedSenders || []).filter((x) => !set.has(x));
+  if (target === "unsorted") unsorted.push(...addresses);
+  else if (target) cats.find((c) => c.id === target)?.senders.push(...addresses);
   updateSettings({ categories: cats, unsortedSenders: unsorted }).then(() => loadCategoryStatus());
-  const where = target === "unsorted" ? "All mail only" : target ? categoryName(target) : "sorted by keywords";
-  toast(`Mail from ${address.replace(/^@/, "anyone at ")} — old and new — is now ${target && target !== "unsorted" ? "in " : ""}${where}.`);
+  const who = addresses.length === 1 ? addresses[0].replace(/^@/, "anyone at ") : `${addresses.length} senders`;
+  const where = target === "unsorted" ? "All mail only" : target ? `in ${categoryName(target)}` : "sorted by keywords";
+  toast(`Mail from ${who}, old and new, is now ${where}.`);
 }
+const assignSender = (address, target) => assignSenders([address], target);
 
 function senderRuleFor(address) {
   const cats = state.settings.categories || [];
@@ -1714,16 +1720,23 @@ function senderRuleFor(address) {
   return null;
 }
 
-function showSenderMenu(anchor) {
-  const address = state.message?.from?.[0]?.email?.toLowerCase();
-  if (!address) return;
-  const current = senderRuleFor(address);
+/** "Always put mail from … in:" for the open email's sender, or every sender of the selected emails. */
+function showSenderMenu(anchor, addresses) {
+  addresses = [...new Set((addresses || [state.message?.from?.[0]?.email]).filter(Boolean).map((a) => a.toLowerCase()))];
+  if (!addresses.length) return;
+  const rules = [...new Set(addresses.map(senderRuleFor))];
+  const current = rules.length === 1 ? rules[0] : undefined;  // a ✓ only when they all share one rule
   const mark = (on) => (on ? " ✓" : "");
-  showMenu(anchor, `Always put mail from ${address} in:`, [
-    ...enabledCategories().map((c) => ({ label: c.name + mark(current === c.id), icon: CATEGORY_ICONS[c.id] || "label", run: () => assignSender(address, c.id) })),
-    { label: "All mail only (don't sort)" + mark(current === "unsorted"), icon: "inbox", run: () => assignSender(address, "unsorted") },
-    ...(current ? [{ label: "Remove rule (sort by keywords)", icon: "close", run: () => assignSender(address, null) }] : []),
-    { label: "Edit categories…", icon: "settings", run: () => openSettings("tabs") },
+  const done = (target) => () => {
+    assignSenders(addresses, target);
+    if (state.view === "list") { state.selected.clear(); render(); }
+  };
+  const who = addresses.length === 1 ? addresses[0] : `these ${addresses.length} senders`;
+  showMenu(anchor, `Always put mail from ${who} in:`, [
+    ...enabledCategories().map((c) => ({ label: c.name + mark(current === c.id), icon: CATEGORY_ICONS[c.id] || "label", run: done(c.id) })),
+    { label: "All mail only (don't sort)" + mark(current === "unsorted"), icon: "inbox", run: done("unsorted") },
+    ...(rules.some(Boolean) ? [{ label: "Remove rule (sort by keywords)", icon: "close", run: done(null) }] : []),
+    { label: "Edit tabs…", icon: "settings", run: () => openSettings("tabs") },
   ]);
 }
 const catIndex = (el) => +el.closest("[data-cat]").dataset.cat;

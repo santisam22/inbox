@@ -1,1 +1,1 @@
-A cleaner Settings: a menu on the left with one section at a time, and Inbox tabs now live in Settings too.
+Select emails and click the tag button to assign their senders to a tab in one step.
