@@ -1,1 +1,1 @@
-Get notified about new email, with a new Notifications section in Settings (previews, sound, which tabs notify you, and Open at login).
+A cleaner Settings: a menu on the left with one section at a time, and Inbox tabs now live in Settings too.

@@ -392,6 +392,24 @@ body.no-snippets .row .snippet { display: none; }
 
 /* ---------- settings page ---------- */
 .settings { padding: 8px 32px 48px; max-width: 760px; }
+.settings-shell { display: flex; align-items: flex-start; min-height: 100%; }
+.settings-nav {
+  position: sticky; top: 0; flex: none; width: 210px; padding: 16px 10px; display: flex; flex-direction: column; gap: 2px;
+  border-right: 1px solid var(--border); align-self: stretch;
+}
+.settings-nav button {
+  display: flex; align-items: center; gap: 12px; height: 38px; padding: 0 14px; border-radius: 19px;
+  color: var(--text); text-align: left; white-space: nowrap;
+}
+.settings-nav button .ic { color: var(--icon); width: 19px; height: 19px; }
+.settings-nav button:hover { background: var(--nav-hover); }
+.settings-nav button.on { background: var(--nav-active); font-weight: 600; }
+.settings-nav button.on .ic { color: var(--accent); }
+.settings-pane { flex: 1; min-width: 0; padding-top: 20px; }
+.settings-head h1 { font-size: 22px; font-weight: 500; margin: 0 0 4px; }
+.settings-head p { margin: 0 0 12px; color: var(--muted); font-size: 13px; }
+.settings-pane .setting:first-of-type { border-top: 1px solid var(--border); }
+.settings-pane a.pill { text-decoration: none; color: var(--text); }
 .settings h2 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 28px 0 4px; }
 .setting { display: flex; align-items: center; gap: 24px; padding: 16px 0; border-bottom: 1px solid var(--border); }
 .setting .label { flex: 1; min-width: 0; }
@@ -545,6 +563,10 @@ button.account { cursor: pointer; border: 0; padding: 0; }
 
 /* ---------- small screens ---------- */
 @media (max-width: 860px) {
+  .settings-shell { flex-direction: column; }
+  .settings-nav { position: static; width: 100%; flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--border); padding: 8px; }
+  .settings-nav button { flex: none; }
+  .settings-pane { padding: 16px; }
   .tab { min-width: 0; padding: 0 12px; }
   .kws, .cat-hint, .rule-label, .cat.unsorted .kws { margin-left: 0; }
   .cat-name { width: 140px; }

@@ -31,6 +31,12 @@ const ICONS = {
   minimize: "M6 19h12v2H6z",
   maximize: "M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z",
   settings: "M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.488.488 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z",
+  palette: "M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c2.76 0 5-2.24 5-5 0-4.42-4.03-8-9-8zm-5.5 9c-.83 0-1.5-.67-1.5-1.5S5.67 9 6.5 9 8 9.67 8 10.5 7.33 12 6.5 12zm3-4C8.67 8 8 7.33 8 6.5S8.67 5 9.5 5s1.5.67 1.5 1.5S10.33 8 9.5 8zm5 0c-.83 0-1.5-.67-1.5-1.5S13.67 5 14.5 5s1.5.67 1.5 1.5S15.33 8 14.5 8zm3 4c-.83 0-1.5-.67-1.5-1.5S16.67 9 17.5 9s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z",
+  layout: "M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z",
+  tune: "M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z",
+  bell: "M12 22c1.1 0 2-.9 2-2h-4c0 1.1.89 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z",
+  shield: "M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z",
+  info: "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z",
   label: "M17.63 5.84C17.27 5.33 16.67 5 16 5L5 5.01C3.9 5.01 3 5.9 3 7v10c0 1.1.9 1.99 2 1.99L16 19c.67 0 1.27-.33 1.63-.84L22 12l-4.37-6.16z",
   caret: "M7 10l5 5 5-5z",
   more: "M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z",
@@ -138,7 +144,18 @@ const state = {
   creatingFolder: false,
   native: { notifications: null, login: null },  // reported by Inbox.app
 };
-const PAGES = { "#settings": "settings", "#categories": "categories" };
+// Settings is one page with a section menu: #settings/<section>.
+const SETTINGS_SECTIONS = [
+  ["appearance", "Appearance", "palette", "Theme, accent color and background."],
+  ["layout", "Layout", "layout", "How dense the message list is, and text size."],
+  ["toolbar", "Toolbar", "tune", "The tools above your messages, and their order."],
+  ["tabs", "Inbox tabs", "label", "Sort your Inbox into tabs by keywords and senders."],
+  ["notifications", "Notifications", "bell", "Alerts for new email."],
+  ["privacy", "Privacy", "shield", "Images and tracking."],
+  ["account", "Account", "person", "Your account and profile photo."],
+  ["about", "About", "info", "Version and updates."],
+];
+const isSettingsHash = (h) => h.startsWith("#settings") || h === "#categories";
 let listToken = 0;
 let settingsReturnHash = "#f=INBOX";
 
@@ -168,8 +185,11 @@ function go(change) {
 }
 
 async function route() {
-  if (PAGES[location.hash]) {
-    state.view = PAGES[location.hash];
+  if (location.hash === "#categories") { location.replace("#settings/tabs"); return; }  // older links
+  if (location.hash.startsWith("#settings")) {
+    const section = location.hash.split("/")[1];
+    state.settingsSection = SETTINGS_SECTIONS.some(([id]) => id === section) ? section : (state.settingsSection || "appearance");
+    state.view = "settings";
     document.body.classList.remove("nav-open");
     render();
     return;
@@ -391,7 +411,6 @@ function render() {
   renderToolbar();
   renderTabs();
   if (state.view === "settings") renderSettings();
-  else if (state.view === "categories") renderCategories();
   else if (state.view === "message") renderMessage();
   else renderList();
 }
@@ -442,8 +461,8 @@ function renderToolbar() {
     return out.join("");
   };
 
-  if (state.view === "settings" || state.view === "categories") {
-    tb.innerHTML = `${btn("closeSettings", "back", "Back to mail (Esc)")}<span class="settings-title">${state.view === "settings" ? "Settings" : "Categories"}</span>`;
+  if (state.view === "settings") {
+    tb.innerHTML = `${btn("closeSettings", "back", "Back to mail (Esc)")}<span class="settings-title">Settings</span>`;
     return;
   }
 
@@ -1100,7 +1119,7 @@ function onKey(e) {
     return;
   }
   if (!$("#help").classList.contains("hidden")) { if (e.key === "Escape" || e.key === "?") $("#help").classList.add("hidden"); return; }
-  if (PAGES["#" + state.view]) {
+  if (state.view === "settings") {
     if (e.key === "Escape") { e.preventDefault(); closeSettings(); }
     return;
   }
@@ -1363,12 +1382,11 @@ function applyAppearance(s) {
 
 // ------------------------------------------------------------------ settings page
 function openPage(hash) {
-  if (!PAGES[location.hash]) settingsReturnHash = location.hash || "#f=INBOX";
+  if (!isSettingsHash(location.hash)) settingsReturnHash = location.hash || "#f=INBOX";
   location.hash = hash;
 }
 function openSettings(section) {
-  openPage("#settings");
-  if (section) setTimeout(() => $(`#settings-${section}`)?.scrollIntoView({ block: "start" }), 50);
+  openPage(`#settings/${section || state.settingsSection || "appearance"}`);
 }
 function closeSettings() {
   location.hash = settingsReturnHash;
@@ -1421,7 +1439,6 @@ async function updateSettings(changes, { rerender = true } = {}) {
   Object.assign(state.settings, changes);
   applyAppearance(state.settings);
   if (rerender && state.view === "settings") renderSettings();
-  if (rerender && state.view === "categories") renderCategories();
   if (changes.toolbar || changes.categories) { renderToolbar(); renderTabs(); }
   if (changes.folderColors) { renderFolders(); if (state.view === "list") renderList(); }
   const resorted = changes.categories || changes.unsortedSenders;
@@ -1445,65 +1462,88 @@ function renderSettings() {
   const toggle = (key) => `<label class="switch"><input type="checkbox" data-toggle="${key}" ${s[key] ? "checked" : ""}><span></span></label>`;
   const isPreset = ACCENTS.some(([, hex]) => hex === s.accent);
   const native = Boolean(window.webkit?.messageHandlers?.update);
+  const current = state.settingsSection || "appearance";
+  const [, title, , subtitle] = SETTINGS_SECTIONS.find(([id]) => id === current);
 
-  $("#view").innerHTML = `<div class="settings">
-    <h2>Appearance</h2>
-    <div class="setting"><div class="label"><b>Theme</b><span>System follows your Mac's light or dark mode.</span></div>
-      ${seg("theme", [["system", "System"], ["light", "Light"], ["dark", "Dark"]])}</div>
-    <div class="setting stack"><div class="label"><b>Accent color</b><span>Used for buttons, highlights and the selected folder.</span></div>
-      <div class="swatches">
-        ${ACCENTS.map(([name, hex]) => `<button class="swatch ${s.accent === hex ? "on" : ""}" style="background:${hex}" title="${name}" aria-label="${name}" data-set="accent" data-value="${hex}"></button>`).join("")}
-        <label class="swatch swatch-custom ${isPreset ? "" : "on"}" title="Custom color" ${isPreset ? "" : `style="background:${esc(s.accent)}"`}><input type="color" data-color value="${esc(s.accent)}" aria-label="Custom color"></label>
-      </div></div>
-    <div class="setting stack"><div class="label"><b>Background</b><span>Shown behind the sidebar and top bar.</span></div>
-      <div class="backgrounds">
-        ${BACKGROUNDS.map(([v, label]) => `<button class="bg-tile ${v === "none" ? "none" : `bg-${v}`} ${s.background === v ? "on" : ""}" data-set="background" data-value="${v}">${label}</button>`).join("")}
-        <label class="bg-tile upload ${s.background === "image" ? "on" : ""}" ${s.background === "image" ? `style="background-image:url('/background?v=${backgroundVersion}')"` : ""}>
-          ${s.background === "image" ? "" : icon("image")}<span>${s.background === "image" ? "Your image" : "Choose image…"}</span><input type="file" accept="image/jpeg,image/png,image/webp,image/gif" data-bg-upload></label>
-      </div>
-      ${s.background !== "none" ? `<div class="dim-row"><span>Fade</span><input type="range" min="0" max="85" value="${s.backgroundDim}" data-dim aria-label="Background fade"><span data-dim-label>${s.backgroundDim}%</span></div>` : ""}
+  const sections = {
+    appearance: () => `
+      <div class="setting"><div class="label"><b>Theme</b><span>System follows your Mac's light or dark mode.</span></div>
+        ${seg("theme", [["system", "System"], ["light", "Light"], ["dark", "Dark"]])}</div>
+      <div class="setting stack"><div class="label"><b>Accent color</b><span>Used for buttons, highlights and the selected folder.</span></div>
+        <div class="swatches">
+          ${ACCENTS.map(([name, hex]) => `<button class="swatch ${s.accent === hex ? "on" : ""}" style="background:${hex}" title="${name}" aria-label="${name}" data-set="accent" data-value="${hex}"></button>`).join("")}
+          <label class="swatch swatch-custom ${isPreset ? "" : "on"}" title="Custom color" ${isPreset ? "" : `style="background:${esc(s.accent)}"`}><input type="color" data-color value="${esc(s.accent)}" aria-label="Custom color"></label>
+        </div></div>
+      <div class="setting stack"><div class="label"><b>Background</b><span>Shown behind the sidebar and top bar.</span></div>
+        <div class="backgrounds">
+          ${BACKGROUNDS.map(([v, label]) => `<button class="bg-tile ${v === "none" ? "none" : `bg-${v}`} ${s.background === v ? "on" : ""}" data-set="background" data-value="${v}">${label}</button>`).join("")}
+          <label class="bg-tile upload ${s.background === "image" ? "on" : ""}" ${s.background === "image" ? `style="background-image:url('/background?v=${backgroundVersion}')"` : ""}>
+            ${s.background === "image" ? "" : icon("image")}<span>${s.background === "image" ? "Your image" : "Choose image…"}</span><input type="file" accept="image/jpeg,image/png,image/webp,image/gif" data-bg-upload></label>
+        </div>
+        ${s.background !== "none" ? `<div class="dim-row"><span>Fade</span><input type="range" min="0" max="85" value="${s.backgroundDim}" data-dim aria-label="Background fade"><span data-dim-label>${s.backgroundDim}%</span></div>` : ""}
+      </div>`,
+
+    layout: () => `
+      <div class="setting"><div class="label"><b>Density</b><span>Compact fits more messages on screen.</span></div>
+        ${seg("density", [["comfortable", "Comfortable"], ["compact", "Compact"]])}</div>
+      <div class="setting"><div class="label"><b>Text size</b></div>
+        ${seg("textSize", [["small", "Small"], ["medium", "Medium"], ["large", "Large"]])}</div>
+      <div class="setting"><div class="label"><b>Message previews</b><span>Show the first line of each message in the list.</span></div>${toggle("snippets")}</div>`,
+
+    toolbar: () => `
+      <p class="section-note">Tools you turn off are still in the <b>⋮ More</b> menu.</p>
+      ${[["none", "When nothing is selected"], ["selection", "When messages are selected"]].map(([when, groupTitle]) => `
+        <div class="tool-group"><div class="tool-group-title">${groupTitle}</div>
+        ${(s.toolbar || []).filter((t) => TOOLS[t.id]?.when === when).map((t, i, arr) => `
+          <div class="tool-row ${t.on ? "" : "off"}">${icon(TOOLS[t.id].icon)}<span class="tool-name">${esc(toolLabel(t.id).replace(/ \(.*\)$/, ""))}</span>
+            <button class="icon-btn" data-tool-move="${t.id}" data-dir="-1" title="Move up" ${i === 0 ? "disabled" : ""}>${icon("up")}</button>
+            <button class="icon-btn" data-tool-move="${t.id}" data-dir="1" title="Move down" ${i === arr.length - 1 ? "disabled" : ""}>${icon("down")}</button>
+            <label class="switch"><input type="checkbox" data-tool-toggle="${t.id}" ${t.on ? "checked" : ""} aria-label="Show ${esc(toolLabel(t.id))}"><span></span></label>
+          </div>`).join("")}</div>`).join("")}`,
+
+    tabs: () => tabsSection(),
+
+    notifications: () => notificationSettings(s, toggle),
+
+    privacy: () => `
+      <div class="setting"><div class="label"><b>Load remote images automatically</b><span>Off blocks tracking pixels. You can still show images in any message.</span></div>${toggle("remoteImages")}</div>
+      <div class="setting"><div class="label"><b>Trusted senders</b><span>${(store.get("trustedSenders", []) || []).length
+        ? `Images always load from ${store.get("trustedSenders", []).length} sender${store.get("trustedSenders", []).length === 1 ? "" : "s"} you trusted.`
+        : "Senders you choose “Always display images from” appear here."}</span></div>
+        ${(store.get("trustedSenders", []) || []).length ? `<button class="pill" data-settings-action="clearTrusted">Forget all</button>` : ""}</div>`,
+
+    account: () => `
+      <div class="setting">${accountAvatar("lg")}<div class="label"><b>${esc(state.me?.email || "")}</b><span>Signed in with an app-specific password.</span></div>
+        <button class="pill danger" data-settings-action="signout">Sign out</button></div>
+      <div class="setting"><div class="label"><b>Profile photo</b><span>${
+        s.photo === "icloud" ? (state.me?.hasICloudPhoto ? "Your iCloud profile photo, updated each time Inbox opens."
+          : "No iCloud photo found. This Mac needs to be signed in to the same Apple Account, with a photo set.")
+        : s.photo === "custom" ? "A photo you chose." : "Your initial."}</span></div>
+        ${seg("photo", [["icloud", "iCloud"], ["custom", "Custom"], ["none", "Initial"]])}</div>
+      ${s.photo === "custom" || !state.me?.photo ? `<div class="setting"><div class="label"><b>${state.me?.hasCustomPhoto ? "Change photo" : "Add your own photo"}</b><span>${
+        state.me?.photo ? "" : "Replace the letter in the corner with a photo. "}JPEG, PNG, WebP or GIF, up to 10 MB.</span></div>
+        <label class="pill">Choose photo…<input type="file" accept="image/jpeg,image/png,image/webp,image/gif" data-photo-upload hidden></label></div>` : ""}`,
+
+    about: () => `
+      <div class="setting"><div class="label"><b>Inbox ${esc(state.me?.version || "")}</b><span>${native ? "Updates install automatically when you click Update now." : "Running in your browser."}</span></div>
+        ${native ? `<button class="pill" data-settings-action="checkUpdates">Check for updates</button>` : ""}</div>
+      <div class="setting"><div class="label"><b>Website</b><span>Download Inbox and share it.</span></div>
+        <a class="pill" href="https://santisam22.github.io/inbox" target="_blank" rel="noopener noreferrer">Open</a></div>
+      <div class="setting"><div class="label"><b>Release notes and source code</b><span>Every version and what changed.</span></div>
+        <a class="pill" href="https://github.com/santisam22/inbox/releases" target="_blank" rel="noopener noreferrer">Open</a></div>
+      <p class="section-note">Inbox is free and open source (MIT License), and isn't affiliated with Apple.</p>`,
+  };
+
+  $("#view").innerHTML = `<div class="settings-shell">
+    <nav class="settings-nav" aria-label="Settings sections">
+      ${SETTINGS_SECTIONS.map(([id, label, ic]) => `<button class="${id === current ? "on" : ""}" data-section="${id}" aria-current="${id === current ? "page" : "false"}">${icon(ic)}<span>${label}</span></button>`).join("")}
+    </nav>
+    <div class="settings settings-pane">
+      <div class="settings-head"><h1>${title}</h1><p>${subtitle}</p></div>
+      ${sections[current]()}
     </div>
-
-    <h2>Layout</h2>
-    <div class="setting"><div class="label"><b>Density</b><span>Compact fits more messages on screen.</span></div>
-      ${seg("density", [["comfortable", "Comfortable"], ["compact", "Compact"]])}</div>
-    <div class="setting"><div class="label"><b>Text size</b></div>
-      ${seg("textSize", [["small", "Small"], ["medium", "Medium"], ["large", "Large"]])}</div>
-    <div class="setting"><div class="label"><b>Message previews</b><span>Show the first line of each message in the list.</span></div>${toggle("snippets")}</div>
-
-    <h2 id="settings-toolbar">Toolbar</h2>
-    <p class="section-note">Choose the tools shown above your messages, and their order. Tools you turn off are still in the <b>⋮ More</b> menu.</p>
-    ${[["none", "When nothing is selected"], ["selection", "When messages are selected"]].map(([when, title]) => `
-      <div class="tool-group"><div class="tool-group-title">${title}</div>
-      ${(s.toolbar || []).filter((t) => TOOLS[t.id]?.when === when).map((t, i, arr) => `
-        <div class="tool-row ${t.on ? "" : "off"}">${icon(TOOLS[t.id].icon)}<span class="tool-name">${esc(toolLabel(t.id).replace(/ \(.*\)$/, ""))}</span>
-          <button class="icon-btn" data-tool-move="${t.id}" data-dir="-1" title="Move up" ${i === 0 ? "disabled" : ""}>${icon("up")}</button>
-          <button class="icon-btn" data-tool-move="${t.id}" data-dir="1" title="Move down" ${i === arr.length - 1 ? "disabled" : ""}>${icon("down")}</button>
-          <label class="switch"><input type="checkbox" data-tool-toggle="${t.id}" ${t.on ? "checked" : ""} aria-label="Show ${esc(toolLabel(t.id))}"><span></span></label>
-        </div>`).join("")}</div>`).join("")}
-    <div class="setting"><div class="label"><b>Inbox tabs</b><span>Sort mail into tabs like Transactions, School and Work.</span></div>
-      <button class="pill" data-settings-action="categories">Edit categories</button></div>
-
-    <h2 id="settings-notifications">Notifications</h2>
-    ${notificationSettings(s, toggle)}
-
-    <h2>Privacy</h2>
-    <div class="setting"><div class="label"><b>Load remote images automatically</b><span>Off blocks tracking pixels. You can still show images in any message.</span></div>${toggle("remoteImages")}</div>
-
-    <h2>Account</h2>
-    <div class="setting">${accountAvatar("lg")}<div class="label"><b>${esc(state.me?.email || "")}</b><span>Signed in with an app-specific password.</span></div>
-      <button class="pill danger" data-settings-action="signout">Sign out</button></div>
-    <div class="setting"><div class="label"><b>Profile photo</b><span>${
-      s.photo === "icloud" ? (state.me?.hasICloudPhoto ? "Your iCloud profile photo, updated each time Inbox opens."
-        : "No iCloud photo found. This Mac needs to be signed in to the same Apple Account, with a photo set.")
-      : s.photo === "custom" ? "A photo you chose." : "Your initial."}</span></div>
-      ${seg("photo", [["icloud", "iCloud"], ["custom", "Custom"], ["none", "Initial"]])}</div>
-    ${s.photo === "custom" || !state.me?.photo ? `<div class="setting"><div class="label"><b>${state.me?.hasCustomPhoto ? "Change photo" : "Add your own photo"}</b><span>${
-      state.me?.photo ? "" : "Replace the letter in the corner with a photo. "}JPEG, PNG, WebP or GIF, up to 10 MB.</span></div>
-      <label class="pill">Choose photo…<input type="file" accept="image/jpeg,image/png,image/webp,image/gif" data-photo-upload hidden></label></div>` : ""}
-    <div class="setting"><div class="label"><b>Inbox ${esc(state.me?.version || "")}</b><span>Updates install automatically when you click Update now.</span></div>
-      ${native ? `<button class="pill" data-settings-action="checkUpdates">Check for updates</button>` : ""}</div>
-  </div>`;
+  </div>`;  // On narrow windows the menu is a scrolling row: keep the open section in view.
+  $(".settings-nav .on")?.scrollIntoView({ block: "nearest", inline: "center" });
 }
 
 document.addEventListener("click", (e) => {
@@ -1524,8 +1564,15 @@ document.addEventListener("click", (e) => {
     if (j !== undefined) { [list[i], list[j]] = [list[j], list[i]]; updateSettings({ toolbar: list }); }
     return;
   }
+  const sectionBtn = e.target.closest("[data-section]");
+  if (sectionBtn) {
+    location.replace(`#settings/${sectionBtn.dataset.section}`);  // switching sections doesn't pile up history
+    $("#view").scrollTop = 0;
+    return;
+  }
   const action = e.target.closest("[data-settings-action]")?.dataset.settingsAction;
-  if (action === "categories") openPage("#categories");
+  if (action === "clearTrusted") { store.set("trustedSenders", []); renderSettings(); toast("Forgot all trusted senders."); }
+  if (action === "categories") openSettings("tabs");
   if (action === "testNotification") { tellApp("test"); toast("Sent a test notification."); }
   if (action === "openNotificationSettings") tellApp("openSystemSettings");
   if (action === "signout") signOut();
@@ -1578,11 +1625,14 @@ document.addEventListener("change", async (e) => {
 });
 
 // ------------------------------------------------------------------ categories page
-function renderCategories() {
+const inTabsSection = () => state.view === "settings" && state.settingsSection === "tabs";
+function renderCategories() { renderSettings(); }
+
+function tabsSection() {
   const cats = state.settings.categories || [];
   const senderChip = (x, j, attr) => `<span class="kw sender" title="${x.startsWith("@") ? `Anyone at ${esc(x.slice(1))}` : esc(x)}">${esc(x.startsWith("@") ? x.slice(1) : x)}<button ${attr}="${j}" aria-label="Remove ${esc(x)}">${icon("close")}</button></span>`;
   const chip = (w, i) => `<span class="kw">${esc(w)}<button data-kw-remove="${i}" title="Remove ${esc(w)}" aria-label="Remove ${esc(w)}">${icon("close")}</button></span>`;
-  $("#view").innerHTML = `<div class="settings categories-page">
+  return `<div class="categories-page">
     <p class="section-note">Inbox sorts your mail into tabs using <b>keywords in the sender or subject</b>. A message goes in the first tab it matches, top to bottom, and is always in All mail. Keywords match whole words, so “sale” won't match “wholesale”.</p>
     <div class="cat locked">
       <div class="cat-head"><span class="cat-icon">${icon("inbox")}</span><b class="cat-title">All mail</b>
@@ -1673,13 +1723,13 @@ function showSenderMenu(anchor) {
     ...enabledCategories().map((c) => ({ label: c.name + mark(current === c.id), icon: CATEGORY_ICONS[c.id] || "label", run: () => assignSender(address, c.id) })),
     { label: "All mail only (don't sort)" + mark(current === "unsorted"), icon: "inbox", run: () => assignSender(address, "unsorted") },
     ...(current ? [{ label: "Remove rule (sort by keywords)", icon: "close", run: () => assignSender(address, null) }] : []),
-    { label: "Edit categories…", icon: "settings", run: () => openPage("#categories") },
+    { label: "Edit categories…", icon: "settings", run: () => openSettings("tabs") },
   ]);
 }
 const catIndex = (el) => +el.closest("[data-cat]").dataset.cat;
 
 document.addEventListener("click", (e) => {
-  if (state.view !== "categories") return;
+  if (!inTabsSection()) return;
   const t = e.target;
   const cats = catCopy();
   if (t.closest("[data-cat-new]")) {
@@ -1712,14 +1762,14 @@ document.addEventListener("click", (e) => {
 });
 
 document.addEventListener("change", (e) => {
-  if (state.view !== "categories") return;
+  if (!inTabsSection()) return;
   const t = e.target, cats = catCopy();
   if (t.matches("[data-cat-toggle]")) { cats[catIndex(t)].enabled = t.checked; saveCategories(cats); }
   if (t.matches("[data-cat-name]")) { cats[catIndex(t)].name = t.value.trim() || "Untitled"; saveCategories(cats); }
 });
 
 document.addEventListener("keydown", (e) => {
-  if (state.view !== "categories" || !e.target.matches("[data-sender-add], [data-unsorted-add]")) return;
+  if (!inTabsSection() || !e.target.matches("[data-sender-add], [data-unsorted-add]")) return;
   if (e.key !== "Enter" && e.key !== ",") return;
   e.preventDefault();
   const raw = e.target.value.split(/[,;\n]+/).map((x) => x.trim()).filter(Boolean);
@@ -1738,7 +1788,7 @@ document.addEventListener("keydown", (e) => {
 });
 
 document.addEventListener("keydown", (e) => {
-  if (state.view !== "categories" || !e.target.matches("[data-kw-add]")) return;
+  if (!inTabsSection() || !e.target.matches("[data-kw-add]")) return;
   if (e.key === "Backspace" && !e.target.value) {
     const cats = catCopy(), i = catIndex(e.target);
     if (cats[i].keywords.length) { cats[i].keywords.pop(); saveCategories(cats); setTimeout(() => $$(".kw-input")[i]?.focus(), 30); }
@@ -1801,7 +1851,7 @@ async function boot() {
   });
   $("#clearSearch").onclick = () => go({ query: "", page: 0, uid: null });
   $("#settingsBtn").onclick = () => openSettings();
-  $("#categoriesBtn").onclick = () => openPage("#categories");
+  $("#categoriesBtn").onclick = () => openSettings("tabs");
 
   // Settings and account info are inlined into the page by the server (no round trip).
   let bootData = {};
