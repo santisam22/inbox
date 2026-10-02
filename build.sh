@@ -29,7 +29,7 @@ mkdir -p "$DIST" "$CACHE" "$APP/Contents/MacOS" "$RES/server/static"
 echo "→ Compiling (Apple silicon + Intel)…"
 for arch in arm64 x86_64; do
   swiftc -O -target $arch-apple-macos12.0 -framework Cocoa -framework WebKit \
-    macos/main.swift macos/Updater.swift -o "$BUILD/Inbox-$arch"
+    macos/main.swift macos/Updater.swift macos/Notifications.swift -o "$BUILD/Inbox-$arch"
 done
 lipo -create "$BUILD/Inbox-arm64" "$BUILD/Inbox-x86_64" -output "$APP/Contents/MacOS/Inbox"
 

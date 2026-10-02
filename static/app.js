@@ -136,6 +136,7 @@ const state = {
   listStale: false,   // set when sorting rules change, so a tab is re-fetched instead of re-shown
   renamingFolder: null,
   creatingFolder: false,
+  native: { notifications: null, login: null },  // reported by Inbox.app
 };
 const PAGES = { "#settings": "settings", "#categories": "categories" };
 let listToken = 0;
@@ -1373,6 +1374,49 @@ function closeSettings() {
   location.hash = settingsReturnHash;
 }
 
+const nativeApp = () => Boolean(window.webkit?.messageHandlers?.notifications);
+const tellApp = (command) => window.webkit?.messageHandlers?.notifications?.postMessage(command);
+
+function notificationSettings(s, toggle) {
+  if (!nativeApp()) return `<p class="section-note">Notifications work in the Inbox app for Mac.</p>`;
+  const perm = state.native.notifications;
+  const login = state.native.login;
+  const status = !s.notifications ? "Off. You won't be notified about new email."
+    : perm === "denied" ? "Blocked by macOS. Allow notifications for Inbox in System Settings."
+    : perm === "notDetermined" ? "macOS will ask you to allow notifications."
+    : "On while Inbox is open, even with its window closed. Held back while you're using Inbox.";
+  const tabs = [...enabledCategories(), { id: "_none", name: "Other mail" }];
+  const skip = s.notifySkip || [];
+  return `
+    <div class="setting"><div class="label"><b>New email notifications</b><span>${status}</span></div>
+      ${s.notifications && perm === "denied" ? `<button class="pill" data-settings-action="openNotificationSettings">Open System Settings</button>` : ""}
+      ${toggle("notifications")}</div>
+    ${s.notifications ? `
+    <div class="setting"><div class="label"><b>Show sender, subject and preview</b><span>Turn off to show just “New email”, for privacy.</span></div>${toggle("notifyPreview")}</div>
+    <div class="setting"><div class="label"><b>Sound</b></div>${toggle("notifySound")}</div>
+    ${enabledCategories().length ? `<div class="setting stack"><div class="label"><b>Notify me about</b><span>Only new, unread mail in the checked tabs notifies you.</span></div>
+      <div class="notify-tabs">${tabs.map((c) => `<label class="check"><input type="checkbox" data-notify-tab="${esc(c.id)}" ${skip.includes(c.id) ? "" : "checked"}>
+        ${c.id === "_none" ? icon("inbox") : icon(CATEGORY_ICONS[c.id] || "label")}<span>${esc(c.name)}</span></label>`).join("")}</div></div>` : ""}
+    <div class="setting"><div class="label"><b>Try it</b><span>Sends a sample notification.</span></div>
+      <button class="pill" data-settings-action="testNotification">Send test notification</button></div>` : ""}
+    <div class="setting"><div class="label"><b>Open Inbox when you log in</b><span>${
+      login === "unsupported" ? "Needs macOS 13 or later. You can add Inbox in System Settings → General → Login Items."
+      : login === "approval" ? "Waiting for your approval in System Settings → General → Login Items."
+      : "Notifications only arrive while Inbox is running."}</span></div>
+      ${login === "unsupported" ? "" : `<label class="switch"><input type="checkbox" data-login ${login === "on" || login === "approval" ? "checked" : ""} aria-label="Open Inbox when you log in"><span></span></label>`}</div>`;
+}
+
+function notificationStatus(perm, login) {
+  const first = state.native.notifications === null;
+  state.native = { notifications: perm, login };
+  // Ask macOS for permission once, right after launch, if notifications are on.
+  if (first && perm === "notDetermined" && state.settings.notifications && !notificationStatus.asked) {
+    notificationStatus.asked = true;
+    tellApp("request");
+  }
+  if (state.view === "settings") renderSettings();
+}
+
 async function updateSettings(changes, { rerender = true } = {}) {
   Object.assign(state.settings, changes);
   applyAppearance(state.settings);
@@ -1440,6 +1484,9 @@ function renderSettings() {
     <div class="setting"><div class="label"><b>Inbox tabs</b><span>Sort mail into tabs like Transactions, School and Work.</span></div>
       <button class="pill" data-settings-action="categories">Edit categories</button></div>
 
+    <h2 id="settings-notifications">Notifications</h2>
+    ${notificationSettings(s, toggle)}
+
     <h2>Privacy</h2>
     <div class="setting"><div class="label"><b>Load remote images automatically</b><span>Off blocks tracking pixels. You can still show images in any message.</span></div>${toggle("remoteImages")}</div>
 
@@ -1479,6 +1526,8 @@ document.addEventListener("click", (e) => {
   }
   const action = e.target.closest("[data-settings-action]")?.dataset.settingsAction;
   if (action === "categories") openPage("#categories");
+  if (action === "testNotification") { tellApp("test"); toast("Sent a test notification."); }
+  if (action === "openNotificationSettings") tellApp("openSystemSettings");
   if (action === "signout") signOut();
   if (action === "checkUpdates") window.webkit?.messageHandlers?.update?.postMessage("check");
 });
@@ -1496,7 +1545,17 @@ document.addEventListener("input", (e) => {
 document.addEventListener("change", async (e) => {
   if (state.view !== "settings") return;
   const t = e.target;
-  if (t.matches("[data-toggle]")) updateSettings({ [t.dataset.toggle]: t.checked }, { rerender: false });
+  if (t.matches("[data-toggle]")) {
+    const key = t.dataset.toggle;
+    updateSettings({ [key]: t.checked }, { rerender: key === "notifications" });
+    if (key === "notifications" && t.checked && state.native.notifications === "notDetermined") tellApp("request");
+  }
+  if (t.matches("[data-notify-tab]")) {
+    const skip = new Set(state.settings.notifySkip || []);
+    if (t.checked) skip.delete(t.dataset.notifyTab); else skip.add(t.dataset.notifyTab);
+    updateSettings({ notifySkip: [...skip] }, { rerender: false });
+  }
+  if (t.matches("[data-login]")) tellApp(t.checked ? "loginOn" : "loginOff");
   if (t.matches("[data-tool-toggle]")) {
     updateSettings({ toolbar: state.settings.toolbar.map((x) => (x.id === t.dataset.toolToggle ? { ...x, on: t.checked } : x)) });
   }
@@ -1715,6 +1774,10 @@ window.inboxApp = {
   compose: (prefill) => state.me && openCompose(prefill || {}),
   openSettings: () => state.me && openSettings(),
   updateAvailable, updateStatus, updateInstalled,
+  notificationStatus,
+  loginItemError: (message) => toast(`Couldn't change Open at login: ${message}`),
+  // Clicking a notification opens that email.
+  openMessage: (folder, uid) => { if (state.me) go({ folder, uid, page: 0, query: "", category: "" }); },
 };
 
 // ------------------------------------------------------------------ boot
@@ -1774,6 +1837,7 @@ async function boot() {
   loadFolders();  // runs on its own connection, in parallel with the message list
   await route();
   loadCategoryStatus();
+  tellApp("status");
   finishBoot();
   if (state.listFromCache) { state.listFromCache = false; loadList({ quiet: true }); }
 

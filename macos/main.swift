@@ -39,6 +39,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate,
         updater.onStatus = { [weak self] state, message in self?.callJS("updateStatus", [state, message]) }
         updater.start()
         noteIfJustUpdated()
+        setUpNotifications()
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
@@ -61,6 +62,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate,
         config.userContentController.add(self, name: "badge")
         config.userContentController.add(self, name: "update")
         config.userContentController.add(self, name: "appearance")
+        config.userContentController.add(self, name: "notifications")
 
         webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = self
@@ -283,6 +285,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate,
                 serverPort = url.port
                 webView.load(URLRequest(url: url))
             }
+            let notifyPrefix = "ICLOUD_MAIL_NOTIFY "
+            if line.hasPrefix(notifyPrefix) { showMailNotification(String(line.dropFirst(notifyPrefix.count))) }
         }
     }
 
@@ -444,6 +448,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate,
         }
         if message.name == "appearance", let theme = message.body as? String {
             applyTheme(theme)
+        }
+        if message.name == "notifications", let command = message.body as? String {
+            handleNotificationCommand(command)
         }
     }
 

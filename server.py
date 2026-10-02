@@ -123,6 +123,10 @@ DEFAULT_SETTINGS = {
     "unsortedSenders": [],      # senders that stay in All mail only, whatever their keywords
     "photo": "icloud",          # icloud | custom | none: the avatar shown for your account
     "folderColors": {},         # folder name -> "#rrggbb" (sidebar icon and message badges)
+    "notifications": True,      # macOS notifications for new Inbox mail (Inbox.app only)
+    "notifyPreview": True,      # show sender, subject and preview (off: just "New email")
+    "notifySound": True,
+    "notifySkip": ["ads"],      # tab ids that don't notify ("_none" = mail outside any tab)
     "toolbar": DEFAULT_TOOLBAR,
 }
 SETTING_CHOICES = {
@@ -242,6 +246,12 @@ def _save_settings(changes):
             value = max(0, min(85, int(value)))
         if key in ("snippets", "remoteImages"):
             value = bool(value)
+        if key in ("notifications", "notifyPreview", "notifySound"):
+            value = bool(value)
+        if key == "notifySkip":
+            if not isinstance(value, list) or len(value) > 50 or not all(
+                    isinstance(x, str) and re.fullmatch(r"[a-z0-9_-]{1,40}", x) for x in value):
+                raise MailError("Invalid notification tabs")
         if key == "folderColors":
             if not isinstance(value, dict) or len(value) > 300 or not all(
                     isinstance(k, str) and len(k) <= 200 and isinstance(v, str) and re.fullmatch(r"#[0-9a-fA-F]{6}", v)
@@ -469,6 +479,31 @@ class SenderRules:
         return False, None
 
 
+class Sorter:
+    """Decides which tab a message belongs in: pinned senders first, then the first tab
+    (top to bottom) whose keywords match the sender or subject. None = All mail only."""
+
+    def __init__(self, categories, unsorted=()):
+        self.rules = [(c["id"], KeywordMatcher(c["keywords"]), c.get("people", False))
+                      for c in categories if c.get("enabled")]
+        self.senders = SenderRules(categories, unsorted)
+
+    def classify(self, sender, address, subject):
+        """sender = "name address", all lowercase."""
+        pinned, target = self.senders.lookup(address)
+        if pinned:
+            return target
+        text = f"{sender} {subject}"
+        tokens = set(WORD_RE.findall(text))
+        automated = None
+        for cid, matcher, people in self.rules:
+            if people and automated is None:
+                automated = is_automated(address)
+            if matcher.matches(text, tokens) or (people and not automated):
+                return cid
+        return None
+
+
 class CategoryIndex:
     """Sender and subject of every Inbox message, kept on this Mac (0600) so tabs can be
     sorted locally: iCloud's own search can't express these rules reliably. Built once,
@@ -552,9 +587,7 @@ class CategoryIndex:
 
     def assignments(self, categories, unsorted=()):
         """uid -> category id for the current rules, applied to every message (old and new); memoized."""
-        rules = [(c["id"], KeywordMatcher(c["keywords"]), c.get("people", False))
-                 for c in categories if c.get("enabled")]
-        senders = SenderRules(categories, unsorted)
+        sorter = Sorter(categories, unsorted)
         with self.lock:
             key = (json.dumps([categories, list(unsorted)], sort_keys=True), len(self.entries), max(self.entries, default=0))
             if self._memo[0] == key:
@@ -562,20 +595,9 @@ class CategoryIndex:
             items = list(self.entries.items())
         result = {}
         for uid, (sender, address, subject) in items:
-            pinned, target = senders.lookup(address)
-            if pinned:
-                if target:
-                    result[uid] = target
-                continue
-            text = f"{sender} {subject}"
-            tokens = set(WORD_RE.findall(text))
-            automated = None
-            for cid, matcher, people in rules:
-                if people and automated is None:
-                    automated = is_automated(address)
-                if matcher.matches(text, tokens) or (people and not automated):
-                    result[uid] = cid
-                    break
+            cid = sorter.classify(sender, address, subject)
+            if cid:
+                result[uid] = cid
         with self.lock:
             self._memo = (key, result)
         return result
@@ -728,13 +750,21 @@ def sign_in(app, data):
     save_config(cfg)
     app["mail"] = Mail(cfg, password)
     app["mail"].warm_up()
+    start_watcher(app)
     threading.Thread(target=sync_icloud_photo, args=(addr,), daemon=True).start()
     checkin(cfg, force=True)
+
+
+def start_watcher(app):
+    """New-mail notifications are shown by Inbox.app, which reads them from stdout."""
+    if app.get("emit") and app["mail"]:
+        threading.Thread(target=app["mail"].watch_new_mail, args=(app["emit"],), daemon=True).start()
 
 
 def sign_out(app):
     cfg = app["cfg"]
     if app["mail"]:
+        app["mail"].closed = True
         with app["mail"].lock:
             app["mail"]._drop()
     if cfg.get("email"):
@@ -1071,6 +1101,7 @@ class Mail:
         self.raw_cache = OrderedDict()
         self.previews = OrderedDict()  # (folder, uid) -> preview text
         self._folders, self._folders_at = None, 0.0
+        self.closed = False  # set on sign-out so background watchers stop
 
     # connection management ---------------------------------------------------
     def _drop(self):
@@ -1082,6 +1113,78 @@ class Mail:
 
     def _select(self, c, folder):
         self.main.select(c, folder)
+
+    # new-mail notifications --------------------------------------------------------
+    def watch_new_mail(self, emit, interval=30):
+        """Every 30 s, ask iCloud for the Inbox's next-UID counter (one tiny request). When it
+        grows, look at just the new messages and hand notifications to emit()."""
+        last = None
+        while True:
+            time.sleep(interval if last is not None else 8)
+            if self.closed:
+                return
+            try:
+                def status(c):
+                    _, d = c.status("INBOX", "(UIDNEXT)")
+                    return int(re.search(rb"UIDNEXT (\d+)", d[0]).group(1))
+                uidnext = self.side.run(status)
+            except Exception as e:
+                print(f"warning: new-mail check failed: {e}", file=sys.stderr)
+                continue
+            if last is None or uidnext <= last:
+                last = max(last or 0, uidnext)
+                continue
+            first, last = last, uidnext
+            settings = load_settings()
+            if not settings["notifications"]:
+                continue
+            try:
+                for note in self._arrivals(first, settings):
+                    emit(note)
+            except Exception as e:
+                print(f"warning: couldn't build notifications: {e}", file=sys.stderr)
+            self.index.refresh_soon(max_age=0)  # put the new mail in its tab too
+
+    def _arrivals(self, first_uid, settings):
+        def op(c):
+            self.side.select(c, "INBOX")
+            _, data = c.uid("FETCH", f"{first_uid}:*",
+                            "(UID FLAGS BODY.PEEK[HEADER.FIELDS (FROM SUBJECT CONTENT-TYPE CONTENT-TRANSFER-ENCODING)] "
+                            "BODY.PEEK[TEXT]<0.2048>)")
+            return parse_fetch(data)
+        fetched = self.side.run(op)
+        sorter = Sorter(settings["categories"], settings["unsortedSenders"])
+        skip = set(settings["notifySkip"])
+        notes = []
+        for uid in sorted(fetched):
+            info = fetched[uid]
+            if uid < first_uid or "\\Seen" in info["flags"]:
+                continue  # "first:*" can return the newest old message; read mail doesn't notify
+            hdr = part_by_prefix(info["parts"], "BODY[HEADER") or b""
+            h = email.message_from_bytes(hdr, policy=policy.default)
+            frm = (addresses(h, "From") or [{"name": "", "email": ""}])[0]
+            subject = safe_header(h, "Subject")
+            tab = sorter.classify(f"{frm['name']} {frm['email']}".lower(), frm["email"].lower(), subject.lower())
+            if (tab or "_none") in skip or frm["email"].lower() == self.user.lower():
+                continue
+            try:
+                preview = snippet_from(hdr, info["parts"].get("BODY[TEXT]") or b"")
+            except Exception:
+                preview = ""
+            notes.append({"uid": uid, "from": frm["name"] or frm["email"], "subject": subject, "preview": preview})
+        if not notes:
+            return []
+        sound = settings["notifySound"]
+        if len(notes) > 3:  # a burst: one summary instead of a pile of banners
+            names = list(dict.fromkeys(n["from"] for n in notes))
+            who = ", ".join(names[:2]) + (f" and {len(names) - 2} more" if len(names) > 2 else "")
+            return [{"id": f"burst-{notes[-1]['uid']}", "uid": notes[-1]["uid"], "title": f"{len(notes)} new emails",
+                     "subtitle": "", "body": f"From {who}" if settings["notifyPreview"] else "", "sound": sound}]
+        if not settings["notifyPreview"]:
+            return [{"id": f"mail-{n['uid']}", "uid": n["uid"], "title": "New email", "subtitle": "", "body": "",
+                     "sound": sound} for n in notes]
+        return [{"id": f"mail-{n['uid']}", "uid": n["uid"], "title": n["from"], "subtitle": n["subject"] or "(no subject)",
+                 "body": n["preview"][:180], "sound": sound} for n in notes]
 
     def warm_up(self):
         """Sign in on both connections and load folders while the window is still opening."""
@@ -1850,13 +1953,15 @@ def main():
         cfg.setdefault("secret", secrets.token_urlsafe(32))
         cfg.setdefault("install_id", str(uuid.uuid4()))
         save_config(cfg)
-    app = {"cfg": cfg, "mail": None}
+    app = {"cfg": cfg, "mail": None,
+           "emit": (lambda note: print("ICLOUD_MAIL_NOTIFY " + json.dumps(note), flush=True)) if args.app else None}
     if cfg.get("email"):
         password = keychain_get(cfg["email"])
         if password:
             app["mail"] = Mail(cfg, password)
             app["mail"].warm_up()  # sign in to iCloud while the window opens
             threading.Thread(target=sync_icloud_photo, args=(cfg["email"],), daemon=True).start()
+            start_watcher(app)
 
     try:
         httpd = ThreadingHTTPServer(("127.0.0.1", args.port or cfg.get("port", 8025)), BaseHTTPRequestHandler)

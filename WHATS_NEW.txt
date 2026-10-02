@@ -1,1 +1,1 @@
-Inbox is now fully native on Apple silicon: no more "Intel-based app" warning from macOS.
+Get notified about new email, with a new Notifications section in Settings (previews, sound, which tabs notify you, and Open at login).

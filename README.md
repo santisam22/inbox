@@ -10,6 +10,10 @@ That's all the setup. To switch accounts, use **Inbox → Sign Out…**.
 
 Nothing else needs to be installed. Inbox includes its own copy of Python (Apple silicon and Intel).
 
+## Notifications
+
+While Inbox is open (its window can be closed), it checks your Inbox for new mail every 30 seconds and shows a macOS notification for new, unread mail. Clicking a notification opens that email. **Settings → Notifications** controls previews, sound, which tabs notify you, and **Open Inbox when you log in**.
+
 ## Security
 
 - Inbox connects **directly to iCloud** over encrypted IMAP/SMTP. There's no forwarding and no third-party server.
