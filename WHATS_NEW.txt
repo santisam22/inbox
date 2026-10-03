@@ -1,1 +1,1 @@
-Move to tab now lets you move just the selected emails, or everything from their senders.
+Fixes menus (like Move to tab) that stopped opening after you clicked their button twice.

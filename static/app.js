@@ -794,8 +794,17 @@ document.addEventListener("keydown", (e) => {
 });
 document.addEventListener("focusout", (e) => { if (e.target.matches?.(".folder-input")) commitFolderEdit(e.target); });
 
-function showMenu(anchor, title, items) {
+let menuAnchor = null;  // the button that opened the current menu
+
+/**
+ * Opens a menu under `anchor`. Clicking the same button again closes it; clicking anywhere
+ * else closes it too (one permanent listener below, so nothing can pile up).
+ * `keepOpen` re-renders an open menu in place (e.g. switching modes inside it).
+ */
+function showMenu(anchor, title, items, { keepOpen = false } = {}) {
+  if (!keepOpen && menuAnchor === anchor && $("#menuHost .menu")) { closeMenu(); return; }
   closeMenu();
+  menuAnchor = anchor;
   const host = $("#menuHost");
   const r = anchor.getBoundingClientRect();
   const swatchRow = (it, i) => `<div class="menu-swatches"><span>${esc(it.label)}</span>
@@ -824,9 +833,20 @@ function showMenu(anchor, title, items) {
     else items[+b.dataset.i].run();
   });
   $("button", menu)?.focus();
-  setTimeout(() => document.addEventListener("click", closeMenu, { once: true }));
 }
-function closeMenu() { $("#menuHost").innerHTML = ""; }
+function closeMenu() { $("#menuHost").innerHTML = ""; menuAnchor = null; }
+
+// Close the open menu on any click outside it. Runs in the capture phase, before other
+// handlers, and ignores clicks on the menu's own button (that button toggles it instead).
+document.addEventListener("click", (e) => {
+  if (!$("#menuHost .menu")) return;
+  if (e.target.closest?.("#menuHost")) return;
+  if (menuAnchor && (menuAnchor === e.target || menuAnchor.contains(e.target))) return;
+  closeMenu();
+}, true);
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && $("#menuHost .menu")) { e.preventDefault(); e.stopPropagation(); closeMenu(); }
+}, true);
 
 let toastTimer;
 function toast(text, action, ms = 6000) {
@@ -1742,12 +1762,13 @@ function showTabMenu(anchor, msgs) {
   const uids = msgs.map((m) => m.uid);
   const tabIcon = (c) => CATEGORY_ICONS[c.id] || "label";
 
+  let switching = false;
   const open = () => {
     const items = [];
     if (inInbox) {
       items.push({ toggle: [["emails", msgs.length === 1 ? "This email" : `These ${msgs.length} emails`],
                             ["senders", addresses.length === 1 ? "Its sender" : "Their senders"]],
-                   current: mode, run: (m) => { mode = m; store.set("tabMoveMode", m); open(); } });
+                   current: mode, run: (m) => { mode = m; store.set("tabMoveMode", m); switching = true; open(); switching = false; } });
     }
     if (mode === "emails") {
       items.push(...enabledCategories().map((c) => ({ label: c.name, icon: tabIcon(c), run: () => moveEmailsToTab(uids, c.id) })));
@@ -1769,7 +1790,7 @@ function showTabMenu(anchor, msgs) {
     const title = mode === "emails"
       ? `Move ${msgs.length === 1 ? "this email" : `these ${msgs.length} emails`} to:`
       : `Always put all mail from ${addresses.length === 1 ? addresses[0] : `these ${addresses.length} senders`} in:`;
-    showMenu(anchor, title, items);
+    showMenu(anchor, title, items, { keepOpen: switching });
   };
   open();
 }
